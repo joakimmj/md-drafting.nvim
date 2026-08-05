@@ -55,4 +55,9 @@ M.actions.register({
   end,
 })
 
+M.actions.register({
+  label = "Add image",
+  run = M.generator.add_image,
+})
+
 return M

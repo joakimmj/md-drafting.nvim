@@ -205,6 +205,23 @@ function M.add_link(opts)
   M.prepare_link(opts)()
 end
 
+function M.add_image()
+  local alt_text = util.prompt("Enter image alt text: ")
+  if not alt_text then
+    return
+  end
+  local url = util.prompt("Enter image source: ")
+
+  if not url or url == "" then
+    vim.notify("Invalid input. Please enter an image URL.", vim.log.levels.ERROR)
+    return
+  end
+
+  local image = "![" .. alt_text .. "](" .. url .. ")"
+  local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+  vim.api.nvim_buf_set_lines(vim.api.nvim_get_current_buf(), cursor_line - 1, cursor_line - 1, false, { image })
+end
+
 -- Resolve the target now, apply later. Both vim.ui.select and the actions menu
 -- are asynchronous, so the selection has to be read before either opens.
 function M.prepare_callout(opts)
