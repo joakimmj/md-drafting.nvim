@@ -43,4 +43,9 @@ M.actions.register({
   end,
 })
 
+M.actions.register({
+  label = "Add table",
+  run = M.generator.add_table,
+})
+
 return M

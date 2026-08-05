@@ -107,6 +107,28 @@ function M.generate_toc()
   end
 end
 
+function M.add_table()
+  local cols = tonumber(util.prompt("Enter number of columns: "))
+
+  if not cols or cols <= 0 then
+    vim.notify("Invalid input. Please enter a positive number for columns.", vim.log.levels.ERROR)
+    return
+  end
+
+  local tbl = {
+    "|" .. string.rep("  |", cols),
+    "|" .. string.rep(" --- |", cols),
+    "|" .. string.rep("  |", cols),
+  }
+
+  local bufnr = vim.api.nvim_get_current_buf()
+  local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+  vim.api.nvim_buf_set_lines(bufnr, cursor_line - 1, cursor_line - 1, false, tbl)
+
+  -- Start typing in the first header cell.
+  util.start_insert(bufnr, 0, cursor_line, 2)
+end
+
 -- Resolve the target now, apply later. Both vim.ui.select and the actions menu
 -- are asynchronous, so the selection has to be read before either opens.
 function M.prepare_callout(opts)

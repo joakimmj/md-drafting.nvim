@@ -56,6 +56,18 @@ function M.start_insert(bufnr, win, row, col)
   end
 end
 
+--- Ask for a value from the user.
+---@param message string The prompt message to display to the user.
+---@param default? string Optional default text to pre-fill the prompt.
+---@return string|nil value The entered string, an empty string if left blank, or nil if cancelled.
+function M.prompt(message, default)
+  local ok, value = pcall(vim.fn.input, message, default or "")
+  if not ok then
+    return nil
+  end
+  return value
+end
+
 -- Root of the buffer's markdown syntax tree.
 function M.ts_root(bufnr)
   local parser = vim.treesitter.get_parser(bufnr, "markdown")
