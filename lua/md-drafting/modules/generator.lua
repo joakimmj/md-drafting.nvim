@@ -268,6 +268,40 @@ function M.add_footnote()
   append_definition(bufnr, "[^" .. footnote_num .. "]: " .. text)
 end
 
+function M.add_code_block()
+  local lang = util.prompt("Enter programming language (default: empty): ")
+  if not lang then
+    return
+  end
+
+  local code_block = {
+    "```" .. lang,
+    "",
+    "```",
+  }
+  local bufnr = vim.api.nvim_get_current_buf()
+  local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+  vim.api.nvim_buf_set_lines(bufnr, cursor_line - 1, cursor_line - 1, false, code_block)
+
+  -- Start typing on the blank line between the fences.
+  util.start_insert(bufnr, 0, cursor_line + 1, 0)
+end
+
+-- Resolve the target now, apply later, so the actions menu can read the
+-- selection before its picker throws visual mode away.
+function M.prepare_block_quote(opts)
+  local bufnr = vim.api.nvim_get_current_buf()
+  local range = util.selection(bufnr, opts)
+
+  return function()
+    quote_range(bufnr, range, nil)
+  end
+end
+
+function M.add_block_quote(opts)
+  M.prepare_block_quote(opts)()
+end
+
 -- Resolve the target now, apply later. Both vim.ui.select and the actions menu
 -- are asynchronous, so the selection has to be read before either opens.
 function M.prepare_callout(opts)

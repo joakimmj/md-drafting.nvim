@@ -31,6 +31,13 @@ vim.api.nvim_create_autocmd("FileType", {
     vim.api.nvim_buf_create_user_command(bufnr, "MdAddLink", drafting.generator.add_link, { range = true })
     vim.api.nvim_buf_create_user_command(bufnr, "MdAddImage", drafting.generator.add_image, {})
     vim.api.nvim_buf_create_user_command(bufnr, "MdAddFootnote", drafting.generator.add_footnote, {})
+    vim.api.nvim_buf_create_user_command(bufnr, "MdAddCodeBlock", drafting.generator.add_code_block, {})
+    vim.api.nvim_buf_create_user_command(
+      bufnr,
+      "MdAddBlockQuote",
+      drafting.generator.add_block_quote,
+      { range = true }
+    )
     vim.api.nvim_buf_create_user_command(bufnr, "MdActions", drafting.actions.open_menu, { range = true })
   end,
 })

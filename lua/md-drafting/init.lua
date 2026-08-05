@@ -65,4 +65,16 @@ M.actions.register({
   run = M.generator.add_footnote,
 })
 
+M.actions.register({
+  label = "Add code block",
+  run = M.generator.add_code_block,
+})
+
+M.actions.register({
+  label = "Add block quote",
+  prepare = function(opts)
+    return M.generator.prepare_block_quote(opts)
+  end,
+})
+
 return M
