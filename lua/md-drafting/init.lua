@@ -36,4 +36,11 @@ M.actions.register({
   run = M.generator.generate_toc,
 })
 
+M.actions.register({
+  label = "Add callout",
+  prepare = function(opts)
+    return M.generator.prepare_callout(opts)
+  end,
+})
+
 return M
