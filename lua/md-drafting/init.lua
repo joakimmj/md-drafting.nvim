@@ -7,6 +7,7 @@ function M.setup(opts)
 end
 
 M.format = require("md-drafting.modules.format")
+M.task = require("md-drafting.modules.task")
 M.actions = require("md-drafting.actions")
 
 -- Action menu
@@ -23,5 +24,10 @@ for _, format in ipairs({
     end,
   })
 end
+
+M.actions.register({
+  label = "Toggle task",
+  run = M.task.toggle,
+})
 
 return M
