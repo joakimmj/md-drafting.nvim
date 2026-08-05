@@ -48,4 +48,11 @@ M.actions.register({
   run = M.generator.add_table,
 })
 
+M.actions.register({
+  label = "Add link",
+  prepare = function(opts)
+    return M.generator.prepare_link(opts)
+  end,
+})
+
 return M

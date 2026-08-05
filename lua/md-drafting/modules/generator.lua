@@ -129,6 +129,82 @@ function M.add_table()
   util.start_insert(bufnr, 0, cursor_line, 2)
 end
 
+local function link_target(bufnr, opts)
+  local text, range = util.selected_text(bufnr, opts)
+
+  if text and text ~= "" then
+    return {
+      text = text,
+      start_line = range[1],
+      start_col = range[2],
+      end_line = range[3],
+      end_col = range[4],
+    }
+  end
+
+  local lnum, col = unpack(vim.api.nvim_win_get_cursor(0))
+  local line = util.line(bufnr, lnum - 1)
+  local at = util.word_end(bufnr, lnum, col)
+  local trailing = line:sub(at + 1):match("^%s*$") and #line or at
+
+  return {
+    pad = at > 0, -- a space clear of the word it follows
+    start_line = lnum - 1,
+    start_col = at,
+    end_line = lnum - 1,
+    end_col = trailing,
+  }
+end
+
+local function link_text(target)
+  if target.text then
+    if target.text:find("\n") then
+      vim.notify("Select the link text on a single line.", vim.log.levels.ERROR)
+      return nil
+    end
+    return target.text
+  end
+
+  local text = util.prompt("Enter link text: ")
+  if not text or text == "" then
+    return nil
+  end
+
+  return text
+end
+
+local function insert_link(bufnr, target, link)
+  if target.pad then
+    link = " " .. link
+  end
+
+  vim.api.nvim_buf_set_text(bufnr, target.start_line, target.start_col, target.end_line, target.end_col, { link })
+  vim.api.nvim_win_set_cursor(0, { target.start_line + 1, target.start_col + #link })
+end
+
+function M.prepare_link(opts)
+  local bufnr = vim.api.nvim_get_current_buf()
+  local target = link_target(bufnr, opts)
+
+  return function()
+    local text = link_text(target)
+    if not text then
+      return
+    end
+
+    local url = util.prompt("Enter URL: ")
+    if not url or url == "" then
+      return
+    end
+
+    insert_link(bufnr, target, "[" .. text .. "](" .. url .. ")")
+  end
+end
+
+function M.add_link(opts)
+  M.prepare_link(opts)()
+end
+
 -- Resolve the target now, apply later. Both vim.ui.select and the actions menu
 -- are asynchronous, so the selection has to be read before either opens.
 function M.prepare_callout(opts)

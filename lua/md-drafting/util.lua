@@ -43,6 +43,41 @@ function M.selection(bufnr, opts)
   return { start_row, start_col, end_row, math.min(end_col, #M.line(bufnr, end_row)) }
 end
 
+-- The selected text, joined with newlines, or nil when nothing is selected.
+function M.selected_text(bufnr, opts)
+  local range = M.selection(bufnr, opts)
+  if not range then
+    return nil
+  end
+  return table.concat(vim.api.nvim_buf_get_text(bufnr, range[1], range[2], range[3], range[4], {}), "\n"), range
+end
+
+function M.word_end(bufnr, row, col)
+  local line = M.line(bufnr, row - 1)
+  local pos = math.max(math.min(col + 1, #line), 1) -- 1-indexed character under the cursor
+
+  if pos <= #line and line:sub(pos, pos):match("%s") then
+    local back = pos - 1
+    while back > 0 and line:sub(back, back):match("%s") do
+      back = back - 1
+    end
+
+    if back > 0 then
+      pos = back
+    else
+      while pos <= #line and line:sub(pos, pos):match("%s") do
+        pos = pos + 1
+      end
+    end
+  end
+
+  while pos <= #line and line:sub(pos, pos):match("%S") do
+    pos = pos + 1
+  end
+
+  return pos - 1
+end
+
 -- Put the cursor at a column and start typing there. Past the end of the line
 -- there is no character to insert before, so append instead.
 function M.start_insert(bufnr, win, row, col)
