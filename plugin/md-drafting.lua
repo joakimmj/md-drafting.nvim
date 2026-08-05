@@ -25,6 +25,7 @@ vim.api.nvim_create_autocmd("FileType", {
       { range = true }
     )
     vim.api.nvim_buf_create_user_command(bufnr, "MdToggleTask", drafting.task.toggle, {})
+    vim.api.nvim_buf_create_user_command(bufnr, "MdGenerateToc", drafting.generator.generate_toc, {})
     vim.api.nvim_buf_create_user_command(bufnr, "MdActions", drafting.actions.open_menu, { range = true })
   end,
 })

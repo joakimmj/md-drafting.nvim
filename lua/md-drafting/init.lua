@@ -8,6 +8,7 @@ end
 
 M.format = require("md-drafting.modules.format")
 M.task = require("md-drafting.modules.task")
+M.generator = require("md-drafting.modules.generator")
 M.actions = require("md-drafting.actions")
 
 -- Action menu
@@ -28,6 +29,11 @@ end
 M.actions.register({
   label = "Toggle task",
   run = M.task.toggle,
+})
+
+M.actions.register({
+  label = "Generate TOC",
+  run = M.generator.generate_toc,
 })
 
 return M

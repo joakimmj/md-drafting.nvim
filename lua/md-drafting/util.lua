@@ -56,4 +56,10 @@ function M.start_insert(bufnr, win, row, col)
   end
 end
 
+-- Root of the buffer's markdown syntax tree.
+function M.ts_root(bufnr)
+  local parser = vim.treesitter.get_parser(bufnr, "markdown")
+  return parser:parse()[1]:root()
+end
+
 return M
