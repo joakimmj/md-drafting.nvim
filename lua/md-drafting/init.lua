@@ -60,4 +60,9 @@ M.actions.register({
   run = M.generator.add_image,
 })
 
+M.actions.register({
+  label = "Add footnote",
+  run = M.generator.add_footnote,
+})
+
 return M

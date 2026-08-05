@@ -222,6 +222,52 @@ function M.add_image()
   vim.api.nvim_buf_set_lines(vim.api.nvim_get_current_buf(), cursor_line - 1, cursor_line - 1, false, { image })
 end
 
+-- `[ref]: url`.
+local REF_DEFINITION = "^%[[^%]]*%]:%s"
+
+-- Append a definition to the end of the buffer
+local function append_definition(bufnr, definition)
+  local last = vim.api.nvim_buf_get_lines(bufnr, -2, -1, false)[1] or ""
+  local lines = { "", definition }
+
+  if last:match("^%s*$") or last:match(REF_DEFINITION) then
+    lines = { definition }
+  end
+
+  vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, lines)
+end
+
+function M.add_footnote()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local text = util.prompt("Enter footnote text: ")
+
+  if not text or text == "" then
+    vim.notify("Invalid input. Please enter footnote text.", vim.log.levels.ERROR)
+    return
+  end
+
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local max_num = 0
+  for _, line in ipairs(lines) do
+    for num_str in line:gmatch("%[%^([%d]+)%]") do
+      local num = tonumber(num_str)
+      if num and num > max_num then
+        max_num = num
+      end
+    end
+  end
+  local footnote_num = max_num + 1
+
+  local footnote_marker = "[^" .. footnote_num .. "]"
+  local lnum, col = unpack(vim.api.nvim_win_get_cursor(0))
+  local at = util.word_end(bufnr, lnum, col)
+
+  vim.api.nvim_buf_set_text(bufnr, lnum - 1, at, lnum - 1, at, { footnote_marker })
+  vim.api.nvim_win_set_cursor(0, { lnum, at + #footnote_marker })
+
+  append_definition(bufnr, "[^" .. footnote_num .. "]: " .. text)
+end
+
 -- Resolve the target now, apply later. Both vim.ui.select and the actions menu
 -- are asynchronous, so the selection has to be read before either opens.
 function M.prepare_callout(opts)
