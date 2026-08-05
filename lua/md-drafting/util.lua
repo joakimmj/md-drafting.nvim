@@ -91,14 +91,6 @@ function M.start_insert(bufnr, win, row, col)
   end
 end
 
--- Insert text after the character at a 0-indexed column.
-function M.insert_after(bufnr, row, col, text)
-  local line = M.line(bufnr, row - 1)
-  local at = math.min(col + 1, #line)
-  vim.api.nvim_buf_set_lines(bufnr, row - 1, row, false, { line:sub(1, at) .. text .. line:sub(at + 1) })
-  return at + #text
-end
-
 --- Ask for a value from the user.
 ---@param message string The prompt message to display to the user.
 ---@param default? string Optional default text to pre-fill the prompt.

@@ -66,6 +66,13 @@ M.actions.register({
 })
 
 M.actions.register({
+  label = "Add reference-style link",
+  prepare = function(opts)
+    return M.generator.prepare_reference_style_link(opts)
+  end,
+})
+
+M.actions.register({
   label = "Add code block",
   run = M.generator.add_code_block,
 })

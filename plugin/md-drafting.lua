@@ -34,6 +34,12 @@ vim.api.nvim_create_autocmd("FileType", {
     vim.api.nvim_buf_create_user_command(bufnr, "MdAddCodeBlock", drafting.generator.add_code_block, {})
     vim.api.nvim_buf_create_user_command(
       bufnr,
+      "MdAddReferenceStyleLink",
+      drafting.generator.add_reference_style_link,
+      { range = true }
+    )
+    vim.api.nvim_buf_create_user_command(
+      bufnr,
       "MdAddBlockQuote",
       drafting.generator.add_block_quote,
       { range = true }

@@ -302,6 +302,61 @@ function M.add_block_quote(opts)
   M.prepare_block_quote(opts)()
 end
 
+local function reference_exists(bufnr, ref_name)
+  local query = vim.treesitter.query.parse("markdown", "(link_reference_definition) @def")
+  if not query then
+    return false
+  end
+
+  for _, node, _ in query:iter_captures(util.ts_root(bufnr), bufnr) do
+    for child in node:iter_children() do
+      if child:type() == "link_label" and vim.treesitter.get_node_text(child, bufnr) == "[" .. ref_name .. "]" then
+        return true
+      end
+    end
+  end
+
+  return false
+end
+
+function M.prepare_reference_style_link(opts)
+  local bufnr = vim.api.nvim_get_current_buf()
+  local target = link_target(bufnr, opts)
+
+  return function()
+    local text = link_text(target)
+    if not text then
+      return
+    end
+
+    local ref_name = util.prompt("Enter reference name (default: link text): ", text)
+    if not ref_name then
+      return
+    end
+    if ref_name == "" then
+      ref_name = text
+    end
+
+    local url
+    if not reference_exists(bufnr, ref_name) then
+      url = util.prompt("Enter URL: ")
+      if not url or url == "" then
+        return
+      end
+    end
+
+    insert_link(bufnr, target, "[" .. text .. "][" .. ref_name .. "]")
+
+    if url then
+      append_definition(bufnr, "[" .. ref_name .. "]: " .. url)
+    end
+  end
+end
+
+function M.add_reference_style_link(opts)
+  M.prepare_reference_style_link(opts)()
+end
+
 -- Resolve the target now, apply later. Both vim.ui.select and the actions menu
 -- are asynchronous, so the selection has to be read before either opens.
 function M.prepare_callout(opts)
