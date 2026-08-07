@@ -48,6 +48,40 @@ M.options = {
       quit = "q",
     },
   },
+
+  focus_mode = {
+    -- Width of the page, read the same way as `presentation.width`.
+    -- default: 80
+    width = 80,
+
+    -- Blank rows between the heading and the page.
+    -- default: 1
+    header_gap = 1,
+
+    -- What the heading counts, in the order shown.
+    stats = { "words", "lines" },
+
+    -- Window options for the page, merged over these defaults: naming one
+    -- replaces it and leaves the rest alone. See the README.
+    win_opts = {
+      -- Typewriter scrolling: Neovim keeps this many lines above and below the
+      -- cursor when it can, and centres it vertically when it cannot.
+      scrolloff = 999,
+
+      -- Fold long lines at word boundaries rather than mid-word.
+      wrap = true,
+      linebreak = true,
+
+      -- Hide the markup the markdown parser marks as concealable, which with
+      -- the stock treesitter queries means emphasis markers. 'concealcursor'
+      -- is left alone, so markup on the cursor's own line stays visible while
+      -- it is being edited.
+      conceallevel = 2,
+
+      cursorline = false,
+      spell = false,
+    },
+  },
 }
 
 return M

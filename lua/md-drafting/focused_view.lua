@@ -267,6 +267,15 @@ function M.open(opts)
   local group = vim.api.nvim_create_augroup("MdDraftingFocusedView", { clear = true })
   local handle = { win = win, buf = opts.buf, closed = false }
 
+  -- Where the cursor is in the view, for a caller showing a real buffer that
+  -- wants to carry the position back to wherever else the buffer is open.
+  function handle.cursor()
+    if handle.win and vim.api.nvim_win_is_valid(handle.win) then
+      return vim.api.nvim_win_get_cursor(handle.win)
+    end
+    return handle.last_cursor
+  end
+
   function handle.refresh_header()
     if opts.header and vim.api.nvim_win_is_valid(header_win) then
       vim.wo[header_win].winbar = opts.header()
@@ -327,6 +336,9 @@ function M.open(opts)
     group = group,
     pattern = tostring(win),
     callback = function()
+      if vim.api.nvim_win_is_valid(win) then
+        handle.last_cursor = vim.api.nvim_win_get_cursor(win)
+      end
       handle.win = nil
       vim.schedule(handle.close)
     end,

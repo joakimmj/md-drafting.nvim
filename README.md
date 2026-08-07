@@ -1,8 +1,8 @@
 # md-drafting.nvim
 
 `md-drafting.nvim` is a Neovim plugin providing markdown editing tools —
-formatting toggles, task cycling, TOC generation, callouts, generators, and a
-built-in presentation mode.
+formatting toggles, task cycling, TOC generation, callouts, generators, and
+built-in presentation and focus modes.
 
 ## ✨ Features
 
@@ -20,6 +20,8 @@ built-in presentation mode.
   block quotes, and reference-style links.
 - **Presentation Mode:** View your markdown file as a slide deck directly
   within Neovim.
+- **Focus Mode:** A distraction-free writing view — the document centered on
+  screen, typewriter scrolling, and a live word count.
 
 ## 📦 Installation
 
@@ -104,6 +106,40 @@ require("md-drafting").setup({
       quit = "q",
     },
   },
+
+  focus_mode = {
+    -- Width of the page, read the same way as `presentation.width`.
+    -- default: 80
+    width = 80,
+
+    -- Blank rows between the heading and the page.
+    -- default: 1
+    header_gap = 1,
+
+    -- What the heading counts, in the order shown.
+    stats = { "words", "lines" },
+
+    -- Window options for the page, merged over these defaults: naming one
+    -- replaces it and leaves the rest alone. See "Window options" below.
+    win_opts = {
+      -- Typewriter scrolling: Neovim keeps this many lines above and below the
+      -- cursor when it can, and centres it vertically when it cannot.
+      scrolloff = 999,
+
+      -- Fold long lines at word boundaries rather than mid-word.
+      wrap = true,
+      linebreak = true,
+
+      -- Hide the markup the markdown parser marks as concealable, which with
+      -- the stock treesitter queries means emphasis markers. 'concealcursor'
+      -- is left alone, so markup on the cursor's own line stays visible while
+      -- it is being edited.
+      conceallevel = 2,
+
+      cursorline = false,
+      spell = false,
+    },
+  },
 })
 ```
 
@@ -111,7 +147,8 @@ require("md-drafting").setup({
 
 This plugin does not come with any default mappings, with the single exception
 of presentation mode, which owns its own buffer-local navigation keys because
-they only mean anything inside the view it creates.
+they only mean anything inside the view it creates. Focus mode gets no such
+exception — it is a writing view, so every letter key belongs to you.
 
 You can set up your own keymaps for markdown files by e.g. using
 a `FileType` autocommand:
@@ -133,10 +170,11 @@ vim.api.nvim_create_autocmd("FileType", {
     vim.keymap.set({ "n", "v" }, "<leader>mfs", md.format.toggle_strikethrough, vim.tbl_extend("force", opts, { desc = "Toggle Strikethrough" }))
     vim.keymap.set({ "n", "v" }, "<leader>mfc", md.format.toggle_inline_code, vim.tbl_extend("force", opts, { desc = "Toggle Inline Code" }))
 
-    -- Tasks, contents and presentation
+    -- Tasks, contents, presentation and focus mode
     vim.keymap.set("n", "<leader>mt", md.task.toggle, vim.tbl_extend("force", opts, { desc = "Toggle Task" }))
     vim.keymap.set("n", "<leader>mo", md.generator.generate_toc, vim.tbl_extend("force", opts, { desc = "Generate TOC" }))
     vim.keymap.set("n", "<leader>mp", md.presentation.start_presentation, vim.tbl_extend("force", opts, { desc = "Start Presentation" }))
+    vim.keymap.set("n", "<leader>mF", md.focus.toggle, vim.tbl_extend("force", opts, { desc = "Toggle Focus Mode" }))
   end,
 })
 ```
@@ -303,6 +341,43 @@ against the slide, with `presentation.header_gap` blank rows between the two.
 Those rows take the slide's own background, so they read as the top of the page
 rather than as margin.
 
+### Focus mode
+
+A distraction-free writing view: the document centered on screen with the rest
+of the editor hidden behind it, the file name and a live word count in the
+heading.
+
+`md.focus.toggle()` opens it and closes it again; `:MdFocus` does the same, and
+so does `:q`. There is no plugin-owned mapping — in a writing view every letter
+key is a key you are typing with — so bind `md.focus.toggle` yourself.
+
+Unlike presentation mode, this is **your document, opened in place**. Edits go
+straight into the buffer, so `:w` works normally and nothing is copied. Closing
+the view carries the cursor back to the window you started from, so you resume
+where you stopped writing rather than where the session began.
+
+Two behaviours come out of the defaults in `focus_mode.win_opts`:
+
+- **Typewriter scrolling** from `scrolloff = 999`. Neovim keeps that many lines
+  above and below the cursor when it can and centres it vertically when it
+  cannot, so the line you are writing stays in the middle of the screen. No
+  scroll-position bookkeeping is involved.
+- **Concealed markup** from `conceallevel = 2`, so prose reads as prose.
+  `concealcursor` is deliberately left alone: markup on the line the cursor is
+  on stays visible while you edit it, and conceals again when you move away.
+  What actually conceals depends on your treesitter queries — the stock
+  `markdown_inline` ones hide emphasis markers but leave link brackets alone.
+
+`focus_mode.stats` chooses what the heading counts, and in which order:
+
+```lua
+focus_mode = { stats = { "lines", "words" } },   -- "12 lines · 142 words"
+```
+
+`"words"` and `"lines"` are the ones that ship. The counts refresh as you type,
+on `TextChanged` and `TextChangedI` — not on cursor movement, which cannot
+change them.
+
 ### Window options
 
 The window a full-screen view opens in is configured through a `win_opts`
@@ -349,6 +424,9 @@ own without disturbing the others:
 | `MdDraftingPresentationHeader` | `MdDraftingHeader` |
 | `MdDraftingPresentationNormal` | `MdDraftingNormal` |
 | `MdDraftingPresentationBackdrop` | `MdDraftingBackdrop` |
+| `MdDraftingFocusHeader` | `MdDraftingHeader` |
+| `MdDraftingFocusNormal` | `MdDraftingNormal` |
+| `MdDraftingFocusBackdrop` | `MdDraftingBackdrop` |
 
 Set a shared group to retint every view at once:
 
@@ -406,6 +484,7 @@ in markdown buffers:
 | `:MdAddCodeBlock` | Insert a fenced code block |
 | `:MdAddBlockQuote` | Quote the current line or selection |
 | `:MdPresent` | Start presentation mode |
+| `:MdFocus` | Toggle focus mode |
 
 ## API
 
@@ -433,6 +512,7 @@ in markdown buffers:
 | `md.generator.add_block_quote(opts?)` | Quote the current line or selection |
 | `md.generator.prepare_block_quote(opts?)` | Resolve the target now, returning a function that quotes it later |
 | `md.presentation.start_presentation()` | Start presentation mode |
+| `md.focus.toggle()` | Toggle focus mode |
 
 Functions taking `opts?` accept the table Neovim passes to a user command, and
 use its `range` to tell whether a selection was given. Called from a mapping

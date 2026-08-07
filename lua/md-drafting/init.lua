@@ -6,13 +6,16 @@ function M.setup(opts)
   config.options = vim.tbl_deep_extend("force", config.options, opts or {})
 
   -- Validate config
-  if config.options.presentation.width <= 0 then
-    vim.notify("md-drafting: presentation.width must be > 0, default to 80", vim.log.levels.ERROR)
-    config.options.presentation.width = 80
+  for _, mode in ipairs({ "presentation", "focus_mode" }) do
+    if config.options[mode].width <= 0 then
+      vim.notify(("md-drafting: %s.width must be > 0, default to 80"):format(mode), vim.log.levels.ERROR)
+      config.options[mode].width = 80
+    end
   end
 end
 
 M.presentation = require("md-drafting.modules.presentation")
+M.focus = require("md-drafting.modules.focus")
 M.format = require("md-drafting.modules.format")
 M.task = require("md-drafting.modules.task")
 M.generator = require("md-drafting.modules.generator")
@@ -94,6 +97,11 @@ M.actions.register({
 M.actions.register({
   label = "Start presentation",
   run = M.presentation.start_presentation,
+})
+
+M.actions.register({
+  label = "Toggle focus mode",
+  run = M.focus.toggle,
 })
 
 return M
