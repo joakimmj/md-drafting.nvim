@@ -4,8 +4,15 @@ local config = require("md-drafting.config")
 
 function M.setup(opts)
   config.options = vim.tbl_deep_extend("force", config.options, opts or {})
+
+  -- Validate config
+  if config.options.presentation.width <= 0 then
+    vim.notify("md-drafting: presentation.width must be > 0, default to 80", vim.log.levels.ERROR)
+    config.options.presentation.width = 80
+  end
 end
 
+M.presentation = require("md-drafting.modules.presentation")
 M.format = require("md-drafting.modules.format")
 M.task = require("md-drafting.modules.task")
 M.generator = require("md-drafting.modules.generator")
@@ -82,6 +89,11 @@ M.actions.register({
   prepare = function(opts)
     return M.generator.prepare_block_quote(opts)
   end,
+})
+
+M.actions.register({
+  label = "Start presentation",
+  run = M.presentation.start_presentation,
 })
 
 return M

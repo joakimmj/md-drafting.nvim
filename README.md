@@ -1,7 +1,8 @@
 # md-drafting.nvim
 
 `md-drafting.nvim` is a Neovim plugin providing markdown editing tools —
-formatting toggles, task cycling, TOC generation, callouts, and generators.
+formatting toggles, task cycling, TOC generation, callouts, generators, and a
+built-in presentation mode.
 
 ## ✨ Features
 
@@ -17,6 +18,8 @@ formatting toggles, task cycling, TOC generation, callouts, and generators.
   empty one (default: GitHub Flavored callouts).
 - **Generators:** Quickly create tables, links, images, footnotes, code blocks,
   block quotes, and reference-style links.
+- **Presentation Mode:** View your markdown file as a slide deck directly
+  within Neovim.
 
 ## 📦 Installation
 
@@ -73,12 +76,42 @@ require("md-drafting").setup({
     "WARNING",
     "CAUTION",
   },
+
+  presentation = {
+    -- Width of the slide. A value of 1 or more is a number of columns, a
+    -- value between 0 and 1 is a fraction of the terminal width. Whatever is
+    -- left over becomes the margin on either side.
+    -- default: 80
+    width = 80,
+
+    -- Blank rows between the heading and the slide. Set to 0 to sit the
+    -- heading directly on top of the content.
+    -- default: 1
+    header_gap = 1,
+
+    -- Window options for the slide, merged over these defaults: naming one
+    -- replaces it and leaves the rest alone. See "Window options" below.
+    win_opts = {
+      -- Fold long lines at word boundaries rather than mid-word.
+      wrap = true,
+      linebreak = true,
+    },
+
+    -- Navigation, scoped to the presentation buffer.
+    keymaps = {
+      next = "n",
+      previous = "p",
+      quit = "q",
+    },
+  },
 })
 ```
 
 ### Mappings
 
-This plugin does not come with any default mappings.
+This plugin does not come with any default mappings, with the single exception
+of presentation mode, which owns its own buffer-local navigation keys because
+they only mean anything inside the view it creates.
 
 You can set up your own keymaps for markdown files by e.g. using
 a `FileType` autocommand:
@@ -100,9 +133,10 @@ vim.api.nvim_create_autocmd("FileType", {
     vim.keymap.set({ "n", "v" }, "<leader>mfs", md.format.toggle_strikethrough, vim.tbl_extend("force", opts, { desc = "Toggle Strikethrough" }))
     vim.keymap.set({ "n", "v" }, "<leader>mfc", md.format.toggle_inline_code, vim.tbl_extend("force", opts, { desc = "Toggle Inline Code" }))
 
-    -- Tasks and contents
+    -- Tasks, contents and presentation
     vim.keymap.set("n", "<leader>mt", md.task.toggle, vim.tbl_extend("force", opts, { desc = "Toggle Task" }))
     vim.keymap.set("n", "<leader>mo", md.generator.generate_toc, vim.tbl_extend("force", opts, { desc = "Generate TOC" }))
+    vim.keymap.set("n", "<leader>mp", md.presentation.start_presentation, vim.tbl_extend("force", opts, { desc = "Start Presentation" }))
   end,
 })
 ```
@@ -230,6 +264,125 @@ afterwards, so regenerating is safe to repeat and picks up headings added or
 removed since. Anchors follow GitHub's slugs: lowercased, spaces turned into
 hyphens, punctuation dropped, underscores kept.
 
+### Presentation mode
+
+Slides are split on thematic breaks (`---`, `***`, `___`). An optional
+frontmatter block supplies the header, which also carries a slide counter:
+
+```markdown
+---
+header_left: My Talk
+header_center: Introduction
+---
+
+# First slide
+
+Some content.
+
+---
+
+# Second slide
+```
+
+Navigate with the `presentation.keymaps` keys, `n` / `p` / `q` by default.
+
+The slide is centred at `presentation.width` columns, and the space left over
+on either side becomes the margin. Set it as a fraction to scale with the
+terminal instead:
+
+```lua
+presentation = { width = 0.6 },   -- 60% of the terminal width
+```
+
+Long lines are wrapped at word boundaries to fit the slide; the document itself
+is never modified, and is restored along with the statusline and tabline when
+the presentation is closed.
+
+The heading takes `StatusLine`'s colors by default, so it reads as a bar
+against the slide, with `presentation.header_gap` blank rows between the two.
+Those rows take the slide's own background, so they read as the top of the page
+rather than as margin.
+
+### Window options
+
+The window a full-screen view opens in is configured through a `win_opts`
+table rather than through a setting per option. Your table is merged over the
+defaults, so naming one option replaces it and leaves the rest alone:
+
+```lua
+presentation = {
+  win_opts = {
+    number = true,        -- line numbers on the slide
+    conceallevel = 2,     -- hide link brackets and emphasis markers
+  },
+},
+```
+
+Anything window-local can go in there. Three things are handled elsewhere and
+should not:
+
+| | |
+|---|---|
+| `number`, `relativenumber`, `signcolumn` | Turned off for every full-screen view before your table is applied, so setting them here works — this is how you turn them back on |
+| `winhighlight` | Owned by the view, since it is what points the window at the highlight groups below. Entries for `Normal`, `NormalNC`, `WinBar` and `WinBarNC` are replaced; any others you set are kept |
+| `wrap`, `linebreak` | Defaulted on, because a centered column of prose wants them. Set either to `false` to opt out |
+
+### Colors
+
+Colors are highlight groups rather than settings, so a colorscheme can theme
+the plugin and you can change them with the same `vim.api.nvim_set_hl` you use
+for everything else.
+
+There are two levels. The shared groups apply to every full-screen view:
+
+| Group | Links to | Used for |
+|---|---|---|
+| `MdDraftingHeader` | `StatusLine` | The heading strip |
+| `MdDraftingNormal` | `Normal` | The page itself, and the gap under the heading |
+| `MdDraftingBackdrop` | `Normal` | The margin on either side |
+
+Each mode then links its own groups to those, so it can be given colors of its
+own without disturbing the others:
+
+| Group | Links to |
+|---|---|
+| `MdDraftingPresentationHeader` | `MdDraftingHeader` |
+| `MdDraftingPresentationNormal` | `MdDraftingNormal` |
+| `MdDraftingPresentationBackdrop` | `MdDraftingBackdrop` |
+
+Set a shared group to retint every view at once:
+
+```lua
+vim.api.nvim_set_hl(0, "MdDraftingBackdrop", { bg = "#11111b" })
+```
+
+Set a mode's own group to change only that mode:
+
+```lua
+vim.api.nvim_set_hl(0, "MdDraftingPresentationHeader", {
+  fg = "#cdd6f4",
+  bg = "#313244",
+  bold = true,
+})
+```
+
+Note that a group is a whole definition, not a patch: setting only `fg` leaves
+the background unset rather than keeping the one it was linking to. Name both
+if you want both.
+
+The plugin defines these with `default = true`, so it never overwrites a group
+you or your colorscheme already defined. `:colorscheme` clears every highlight
+group, though, including your own overrides — put them behind a `ColorScheme`
+autocommand if you switch colorschemes at runtime:
+
+```lua
+vim.api.nvim_create_autocmd("ColorScheme", {
+  callback = function()
+    vim.api.nvim_set_hl(0, "MdDraftingBackdrop", { bg = "#11111b" })
+  end,
+})
+```
+
 ### Commands
 
 With `add_commands = true`, each function also gets a buffer-local user command
@@ -252,6 +405,7 @@ in markdown buffers:
 | `:MdAddFootnote` | Insert a footnote and its definition |
 | `:MdAddCodeBlock` | Insert a fenced code block |
 | `:MdAddBlockQuote` | Quote the current line or selection |
+| `:MdPresent` | Start presentation mode |
 
 ## API
 
@@ -278,6 +432,7 @@ in markdown buffers:
 | `md.generator.add_code_block()` | Insert a fenced code block |
 | `md.generator.add_block_quote(opts?)` | Quote the current line or selection |
 | `md.generator.prepare_block_quote(opts?)` | Resolve the target now, returning a function that quotes it later |
+| `md.presentation.start_presentation()` | Start presentation mode |
 
 Functions taking `opts?` accept the table Neovim passes to a user command, and
 use its `range` to tell whether a selection was given. Called from a mapping

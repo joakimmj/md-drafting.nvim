@@ -18,6 +18,36 @@ M.options = {
     "WARNING",
     "CAUTION",
   },
+
+  presentation = {
+    -- Width of the slide. A value of 1 or more is a number of columns, a
+    -- value between 0 and 1 is a fraction of the terminal width. Whatever is
+    -- left over becomes the margin on either side.
+    -- default: 80
+    width = 80,
+
+    -- Blank rows between the heading and the slide. Set to 0 to sit the
+    -- heading directly on top of the content.
+    -- default: 1
+    header_gap = 1,
+
+    -- Window options for the slide, merged over these defaults: naming one
+    -- replaces it and leaves the rest alone. Line numbers, the sign column
+    -- and the colors are not among them -- the first two are off for every
+    -- full-screen view, and colors are highlight groups. See the README.
+    win_opts = {
+      -- Fold long lines at word boundaries rather than mid-word.
+      wrap = true,
+      linebreak = true,
+    },
+
+    -- Navigation, scoped to the presentation buffer.
+    keymaps = {
+      next = "n",
+      previous = "p",
+      quit = "q",
+    },
+  },
 }
 
 return M

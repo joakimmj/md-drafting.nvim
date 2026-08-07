@@ -10,6 +10,7 @@ vim.api.nvim_create_autocmd("FileType", {
     end
 
     local bufnr = event.buf
+    vim.api.nvim_buf_create_user_command(bufnr, "MdPresent", drafting.presentation.start_presentation, {})
     vim.api.nvim_buf_create_user_command(bufnr, "MdToggleBold", drafting.format.toggle_bold, { range = true })
     vim.api.nvim_buf_create_user_command(bufnr, "MdToggleItalic", drafting.format.toggle_italic, { range = true })
     vim.api.nvim_buf_create_user_command(
