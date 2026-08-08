@@ -119,13 +119,17 @@ require("md-drafting").setup({
     -- What the heading counts, in the order shown.
     stats = { "words", "lines" },
 
+    -- Turn typewriter scrolling on when focus mode opens, and off again when
+    -- it closes. Configured under `typewriter` below.
+    -- default: true
+    typewriter = true,
+
     -- Window options for the page, merged over these defaults: naming one
     -- replaces it and leaves the rest alone. See "Window options" below.
+    --
+    -- 'scrolloff' and 'smoothscroll' are not among them: typewriter scrolling
+    -- takes both over while it is on, and puts them back afterwards.
     win_opts = {
-      -- Typewriter scrolling: Neovim keeps this many lines above and below the
-      -- cursor when it can, and centres it vertically when it cannot.
-      scrolloff = 999,
-
       -- Fold long lines at word boundaries rather than mid-word.
       wrap = true,
       linebreak = true,
@@ -139,6 +143,15 @@ require("md-drafting").setup({
       cursorline = false,
       spell = false,
     },
+  },
+
+  -- Typewriter scrolling. Not tied to focus mode -- it can be toggled in any
+  -- buffer with `typewriter.toggle()`.
+  typewriter = {
+    -- Where the line being written sits, as a fraction of the window height.
+    -- 0.4 puts it a little above the middle, which some people prefer.
+    -- default: 0.5
+    position = 0.5,
   },
 })
 ```
@@ -175,6 +188,7 @@ vim.api.nvim_create_autocmd("FileType", {
     vim.keymap.set("n", "<leader>mo", md.generator.generate_toc, vim.tbl_extend("force", opts, { desc = "Generate TOC" }))
     vim.keymap.set("n", "<leader>mp", md.presentation.start_presentation, vim.tbl_extend("force", opts, { desc = "Start Presentation" }))
     vim.keymap.set("n", "<leader>mF", md.focus.toggle, vim.tbl_extend("force", opts, { desc = "Toggle Focus Mode" }))
+    vim.keymap.set("n", "<leader>mw", md.typewriter.toggle, vim.tbl_extend("force", opts, { desc = "Toggle Typewriter" }))
   end,
 })
 ```
@@ -356,12 +370,13 @@ straight into the buffer, so `:w` works normally and nothing is copied. Closing
 the view carries the cursor back to the window you started from, so you resume
 where you stopped writing rather than where the session began.
 
-Two behaviours come out of the defaults in `focus_mode.win_opts`:
+Focus mode turns **typewriter scrolling** on while it is open, and off again
+when it closes. It is a feature in its own right — see below — so set
+`focus_mode.typewriter = false` if you would rather focus mode left scrolling
+alone.
 
-- **Typewriter scrolling** from `scrolloff = 999`. Neovim keeps that many lines
-  above and below the cursor when it can and centres it vertically when it
-  cannot, so the line you are writing stays in the middle of the screen. No
-  scroll-position bookkeeping is involved.
+One more behaviour comes out of the defaults in `focus_mode.win_opts`:
+
 - **Concealed markup** from `conceallevel = 2`, so prose reads as prose.
   `concealcursor` is deliberately left alone: markup on the line the cursor is
   on stays visible while you edit it, and conceals again when you move away.
@@ -377,6 +392,44 @@ focus_mode = { stats = { "lines", "words" } },   -- "12 lines · 142 words"
 `"words"` and `"lines"` are the ones that ship. The counts refresh as you type,
 on `TextChanged` and `TextChangedI` — not on cursor movement, which cannot
 change them.
+
+### Typewriter scrolling
+
+The line you are writing keeps a fixed height on screen, and the text moves
+under it. It works in any buffer and any window, with or without focus mode:
+
+| | |
+|---|---|
+| `md.typewriter.toggle(bufnr?)` | Switch it on or off |
+| `md.typewriter.enable(bufnr?)` | |
+| `md.typewriter.disable(bufnr?)` | |
+| `md.typewriter.is_enabled(bufnr?)` | |
+| `:MdTypewriter` | Toggle in the current buffer |
+
+It is switched on **per buffer**, so it can be on for the chapter you are
+drafting and off for the notes file in the next window.
+
+`scrolloff` cannot do this on its own, which is the point of the feature. It
+asks for so many lines above and below the cursor and gives up when the
+document does not have them — so it holds in the middle of a file and lets go
+at exactly the two places writing happens: the end of a draft you are
+extending, and the first lines of a new one.
+
+Below the last line Vim already scrolls further than `scrolloff` will, so the
+bottom needs nothing. Above the first line there is nothing to scroll to, so
+blank rows are hung there as virtual lines. They are virtual, so the document
+never gains lines and `:w` writes only what you typed — but it does mean that
+with the cursor at the top of the file, the rows above it are blank. That is
+the effect working, not a rendering fault.
+
+While it is on, `scrolloff` and `smoothscroll` belong to it — both are set on
+the window and put back when you switch it off.
+
+```lua
+typewriter = {
+  position = 0.4,   -- a little above the middle; 0.5 is the default
+},
+```
 
 ### Window options
 
@@ -401,6 +454,7 @@ should not:
 | `number`, `relativenumber`, `signcolumn` | Turned off for every full-screen view before your table is applied, so setting them here works — this is how you turn them back on |
 | `winhighlight` | Owned by the view, since it is what points the window at the highlight groups below. Entries for `Normal`, `NormalNC`, `WinBar` and `WinBarNC` are replaced; any others you set are kept |
 | `wrap`, `linebreak` | Defaulted on, because a centered column of prose wants them. Set either to `false` to opt out |
+| `scrolloff`, `smoothscroll` | Taken over by typewriter scrolling while it is on, and put back when it is switched off |
 
 ### Colors
 
@@ -485,6 +539,7 @@ in markdown buffers:
 | `:MdAddBlockQuote` | Quote the current line or selection |
 | `:MdPresent` | Start presentation mode |
 | `:MdFocus` | Toggle focus mode |
+| `:MdTypewriter` | Toggle typewriter scrolling |
 
 ## API
 
@@ -513,6 +568,10 @@ in markdown buffers:
 | `md.generator.prepare_block_quote(opts?)` | Resolve the target now, returning a function that quotes it later |
 | `md.presentation.start_presentation()` | Start presentation mode |
 | `md.focus.toggle()` | Toggle focus mode |
+| `md.typewriter.toggle(bufnr?)` | Toggle typewriter scrolling |
+| `md.typewriter.enable(bufnr?)` | Turn typewriter scrolling on |
+| `md.typewriter.disable(bufnr?)` | Turn typewriter scrolling off |
+| `md.typewriter.is_enabled(bufnr?)` | Whether it is on for that buffer |
 
 Functions taking `opts?` accept the table Neovim passes to a user command, and
 use its `range` to tell whether a selection was given. Called from a mapping

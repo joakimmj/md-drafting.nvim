@@ -2,6 +2,7 @@ local M = {}
 
 local config = require("md-drafting.config")
 local focused_view = require("md-drafting.focused_view")
+local typewriter = require("md-drafting.modules.typewriter")
 
 local state = {
   view = nil,
@@ -54,7 +55,14 @@ end
 -- The document stays displayed in the window focus mode was started from, and
 -- that window keeps a cursor position of its own. Without this, writing in the
 -- float would end with the cursor back wherever the session happened to start.
-local function carry_cursor_back()
+local function on_close()
+  -- Only if focus mode turned it on: it can also be switched on by hand, in
+  -- which case leaving focus mode is no reason to take it away.
+  if state.owns_typewriter then
+    typewriter.disable(state.view.buf)
+    state.owns_typewriter = false
+  end
+
   local position = state.view and state.view.cursor()
   local origin = state.origin_win
 
@@ -100,8 +108,13 @@ function M.toggle()
     normal_hl = "MdDraftingFocusNormal",
     backdrop = "MdDraftingFocusBackdrop",
     win_opts = config.options.focus_mode.win_opts,
-    on_close = carry_cursor_back,
+    on_close = on_close,
   })
+
+  if config.options.focus_mode.typewriter and not typewriter.is_enabled(bufnr) then
+    typewriter.enable(bufnr)
+    state.owns_typewriter = true
+  end
 
   -- Start where the document was left, rather than at the top of the file.
   local position = vim.api.nvim_win_get_cursor(state.origin_win)

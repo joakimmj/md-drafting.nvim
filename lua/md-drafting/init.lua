@@ -12,10 +12,18 @@ function M.setup(opts)
       config.options[mode].width = 80
     end
   end
+
+  -- A position outside the window is not a row the cursor can be held on.
+  local typewriter = config.options.typewriter
+  if typewriter.position <= 0 or typewriter.position > 1 then
+    vim.notify("md-drafting: typewriter.position must be > 0 and <= 1, default to 0.5", vim.log.levels.ERROR)
+    typewriter.position = 0.5
+  end
 end
 
 M.presentation = require("md-drafting.modules.presentation")
 M.focus = require("md-drafting.modules.focus")
+M.typewriter = require("md-drafting.modules.typewriter")
 M.format = require("md-drafting.modules.format")
 M.task = require("md-drafting.modules.task")
 M.generator = require("md-drafting.modules.generator")
@@ -102,6 +110,13 @@ M.actions.register({
 M.actions.register({
   label = "Toggle focus mode",
   run = M.focus.toggle,
+})
+
+M.actions.register({
+  label = "Toggle typewriter scrolling",
+  run = function()
+    M.typewriter.toggle()
+  end,
 })
 
 return M

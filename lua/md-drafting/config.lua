@@ -61,13 +61,17 @@ M.options = {
     -- What the heading counts, in the order shown.
     stats = { "words", "lines" },
 
+    -- Turn typewriter scrolling on when focus mode opens, and off again when
+    -- it closes. Configured under `typewriter` below.
+    -- default: true
+    typewriter = true,
+
     -- Window options for the page, merged over these defaults: naming one
     -- replaces it and leaves the rest alone. See the README.
+    --
+    -- 'scrolloff' and 'smoothscroll' are not among them: typewriter scrolling
+    -- takes both over while it is on, and puts them back afterwards.
     win_opts = {
-      -- Typewriter scrolling: Neovim keeps this many lines above and below the
-      -- cursor when it can, and centres it vertically when it cannot.
-      scrolloff = 999,
-
       -- Fold long lines at word boundaries rather than mid-word.
       wrap = true,
       linebreak = true,
@@ -81,6 +85,15 @@ M.options = {
       cursorline = false,
       spell = false,
     },
+  },
+
+  -- Typewriter scrolling, which can be toggled in any buffer with
+  -- `typewriter.toggle()` and is not tied to focus mode.
+  typewriter = {
+    -- Where the line being written sits, as a fraction of the window height.
+    -- 0.4 puts it a little above the middle, which some people prefer.
+    -- default: 0.5
+    position = 0.5,
   },
 }
 

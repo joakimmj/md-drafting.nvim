@@ -5,7 +5,6 @@ local M = {}
 local BACKDROP_ZINDEX = 40
 local CONTENT_ZINDEX = 50
 
-
 -- Hidden while a view is open. Both are global rather than window-local, so
 -- they have to be saved and put back manually.
 local GLOBALS = { "laststatus", "showtabline" }
