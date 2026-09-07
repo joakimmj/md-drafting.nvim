@@ -8,8 +8,9 @@ built-in presentation and focus modes.
 
 - **Text Formatting:** Toggle **bold**, *italic*, ~~strikethrough~~, and 
   `inline code` on a selection or on the word under the cursor.
-- **Actions Menu:** Reach every action from a single picker instead of a
-  mapping per command.
+- **Actions Menus:** Reach every action from a single picker instead of a
+  mapping per command, or bind a smaller, named menu — your own or the
+  built-in `formatting`, `insert` and `view` ones.
 - **Task:** Cycle through task list item states (default:
   `<no checkbox> → [ ] → [x]`).
 - **TOC Generation:** Generate and regenerate a table of contents from your
@@ -174,8 +175,13 @@ vim.api.nvim_create_autocmd("FileType", {
     local opts = { buffer = true }
 
     -- Actions menu: everything from one mapping
-    vim.keymap.set({ "n", "v" }, "<leader>ma", md.actions.open_menu, vim.tbl_extend("force", opts, { desc = "MD Actions" }))
-    vim.keymap.set("i", "<C-c>", md.actions.open_menu, vim.tbl_extend("force", opts, { desc = "MD Actions" }))
+    vim.keymap.set({ "n", "v" }, "<leader>ma", md.actions.open_all, vim.tbl_extend("force", opts, { desc = "MD Actions" }))
+    vim.keymap.set("i", "<C-c>", md.actions.open_all, vim.tbl_extend("force", opts, { desc = "MD Actions" }))
+
+    -- ... or a named menu on its own mapping
+    vim.keymap.set({ "n", "v" }, "<leader>mm", function()
+      md.actions.open_menu("formatting")
+    end, vim.tbl_extend("force", opts, { desc = "MD Formatting Actions" }))
 
     -- Formatting
     vim.keymap.set({ "n", "v" }, "<leader>mfb", md.format.toggle_bold, vim.tbl_extend("force", opts, { desc = "Toggle Bold" }))
@@ -195,17 +201,29 @@ vim.api.nvim_create_autocmd("FileType", {
 
 ## 🚀 Usage
 
-### Actions menu
+### Actions menus
 
-`md.actions.open_menu()` offers every action in a `vim.ui.select` picker, so one
-mapping reaches all of them. It works on a visual selection, on the word under
-the cursor, or on nothing in particular, exactly as the individual functions do.
+Every action belongs to one or more named menus.
+`md.actions.open_all()` offers all of them in a `vim.ui.select` picker, so one
+mapping reaches everything, and `md.actions.open_menu(name)` offers a single
+menu, for a mapping that stays closer to the task at hand. Either way the picker
+works on a visual selection, on the word under the cursor, or on nothing in
+particular, exactly as the individual functions do.
 
-Features you add yourself can join the same menu rather than growing a second
-one:
+The actions that ship with the plugin come in three menus:
+
+| Menu | Actions |
+|---|---|
+| `formatting` | Bold, Italic, Strikethrough, Inline code, Toggle task |
+| `insert` | Generate TOC, Add callout, Add table, Add link, Add image, Add footnote, Add reference-style link, Add code block, Add block quote |
+| `view` | Start presentation, Toggle focus mode, Toggle typewriter scrolling |
+
+Features you add yourself can join those menus rather than growing a second one,
+or open a menu of their own — a menu exists as soon as something is registered
+to it:
 
 ```lua
-require("md-drafting").actions.register({
+require("md-drafting").actions.register("insert", {
   label = "Insert today's date",
   run = function()
     vim.api.nvim_put({ os.date("%Y-%m-%d") }, "c", true, true)
@@ -223,12 +241,33 @@ same idea for the features that ship with the plugin, and are how those entries
 are registered:
 
 ```lua
-require("md-drafting").actions.register({
+require("md-drafting").actions.register("formatting", {
   label = "Highlight",
   prepare = function(opts)
     return require("md-drafting").format.prepare("==", opts)
   end,
 })
+```
+
+An action goes in one menu per `register` call. Register the same action table
+again to put it in a second menu — opening both menus together offers it once,
+since the picker recognises it as the same action:
+
+```lua
+local md = require("md-drafting")
+
+local rule = {
+  label = "Add a horizontal rule",
+  run = function()
+    vim.api.nvim_put({ "---" }, "l", true, true)
+  end,
+}
+
+md.actions.register("formatting", rule)
+md.actions.register("insert", rule)
+
+-- One picker, both menus, in registration order, the rule listed once
+md.actions.open_menu({ "formatting", "insert" })
 ```
 
 ### Formatting
@@ -522,7 +561,7 @@ in markdown buffers:
 
 | Command | Description |
 |---|---|
-| `:MdActions` | Open the actions menu |
+| `:MdActions [menu ...]` | Open the actions menu, or the named menus given |
 | `:MdToggleBold` | Toggle bold |
 | `:MdToggleItalic` | Toggle italic |
 | `:MdToggleStrikethrough` | Toggle strikethrough |
@@ -545,8 +584,10 @@ in markdown buffers:
 
 | Function | Description |
 |---|---|
-| `md.actions.open_menu(opts?)` | Open the actions picker |
-| `md.actions.register(action)` | Add an entry to the actions menu |
+| `md.actions.open_all(opts?)` | Open a picker with every action |
+| `md.actions.open_menu(names, opts?)` | Open a picker with one menu, or several |
+| `md.actions.register(menu, action)` | Add an entry to a menu |
+| `md.actions.menu_names()` | The registered menu names, sorted |
 | `md.format.toggle_bold(opts?)` | Toggle bold |
 | `md.format.toggle_italic(opts?)` | Toggle italic |
 | `md.format.toggle_strikethrough(opts?)` | Toggle strikethrough |

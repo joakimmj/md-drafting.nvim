@@ -49,6 +49,18 @@ vim.api.nvim_create_autocmd("FileType", {
       drafting.generator.add_block_quote,
       { range = true }
     )
-    vim.api.nvim_buf_create_user_command(bufnr, "MdActions", drafting.actions.open_menu, { range = true })
+    vim.api.nvim_buf_create_user_command(bufnr, "MdActions", function(opts)
+      if #opts.fargs > 0 then
+        drafting.actions.open_menu(opts.fargs, opts)
+      else
+        drafting.actions.open_all(opts)
+      end
+    end, {
+      range = true,
+      nargs = "*",
+      complete = function()
+        return drafting.actions.menu_names()
+      end,
+    })
   end,
 })

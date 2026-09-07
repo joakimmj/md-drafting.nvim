@@ -29,14 +29,14 @@ M.task = require("md-drafting.modules.task")
 M.generator = require("md-drafting.modules.generator")
 M.actions = require("md-drafting.actions")
 
--- Action menu
+-- Action menus
 for _, format in ipairs({
   { label = "Bold", pattern = "**" },
   { label = "Italic", pattern = "*" },
   { label = "Strikethrough", pattern = "~~" },
   { label = "Inline code", pattern = "`" },
 }) do
-  M.actions.register({
+  M.actions.register("formatting", {
     label = format.label,
     prepare = function(opts)
       return M.format.prepare(format.pattern, opts)
@@ -44,75 +44,75 @@ for _, format in ipairs({
   })
 end
 
-M.actions.register({
+M.actions.register("formatting", {
   label = "Toggle task",
   run = M.task.toggle,
 })
 
-M.actions.register({
+M.actions.register("insert", {
   label = "Generate TOC",
   run = M.generator.generate_toc,
 })
 
-M.actions.register({
+M.actions.register("insert", {
   label = "Add callout",
   prepare = function(opts)
     return M.generator.prepare_callout(opts)
   end,
 })
 
-M.actions.register({
+M.actions.register("insert", {
   label = "Add table",
   run = M.generator.add_table,
 })
 
-M.actions.register({
+M.actions.register("insert", {
   label = "Add link",
   prepare = function(opts)
     return M.generator.prepare_link(opts)
   end,
 })
 
-M.actions.register({
+M.actions.register("insert", {
   label = "Add image",
   run = M.generator.add_image,
 })
 
-M.actions.register({
+M.actions.register("insert", {
   label = "Add footnote",
   run = M.generator.add_footnote,
 })
 
-M.actions.register({
+M.actions.register("insert", {
   label = "Add reference-style link",
   prepare = function(opts)
     return M.generator.prepare_reference_style_link(opts)
   end,
 })
 
-M.actions.register({
+M.actions.register("insert", {
   label = "Add code block",
   run = M.generator.add_code_block,
 })
 
-M.actions.register({
+M.actions.register("insert", {
   label = "Add block quote",
   prepare = function(opts)
     return M.generator.prepare_block_quote(opts)
   end,
 })
 
-M.actions.register({
+M.actions.register("view", {
   label = "Start presentation",
   run = M.presentation.start_presentation,
 })
 
-M.actions.register({
+M.actions.register("view", {
   label = "Toggle focus mode",
   run = M.focus.toggle,
 })
 
-M.actions.register({
+M.actions.register("view", {
   label = "Toggle typewriter scrolling",
   run = function()
     M.typewriter.toggle()
