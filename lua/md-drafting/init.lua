@@ -1,6 +1,7 @@
 local M = {}
 
 local config = require("md-drafting.config")
+local syntax = require("md-drafting.syntax")
 
 function M.setup(opts)
   config.options = vim.tbl_deep_extend("force", config.options, opts or {})
@@ -27,14 +28,14 @@ M.typewriter = require("md-drafting.modules.typewriter")
 M.format = require("md-drafting.modules.format")
 M.task = require("md-drafting.modules.task")
 M.generator = require("md-drafting.modules.generator")
-M.actions = require("md-drafting.actions")
+M.actions = require("md-drafting.lib.actions")
 
 -- Action menus
 for _, format in ipairs({
-  { label = "Bold", pattern = "**" },
-  { label = "Italic", pattern = "*" },
-  { label = "Strikethrough", pattern = "~~" },
-  { label = "Inline code", pattern = "`" },
+  { label = "Bold", pattern = syntax.EMPHASIS.bold },
+  { label = "Italic", pattern = syntax.EMPHASIS.italic },
+  { label = "Strikethrough", pattern = syntax.EMPHASIS.strikethrough },
+  { label = "Inline code", pattern = syntax.EMPHASIS.code },
 }) do
   M.actions.register("formatting", {
     label = format.label,

@@ -1,7 +1,7 @@
 local M = {}
 
 local config = require("md-drafting.config")
-local focused_view = require("md-drafting.focused_view")
+local focused_view = require("md-drafting.lib.focused_view")
 local typewriter = require("md-drafting.modules.typewriter")
 
 local state = {

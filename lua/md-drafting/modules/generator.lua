@@ -1,7 +1,9 @@
 local M = {}
 
 local config = require("md-drafting.config")
-local util = require("md-drafting.util")
+local section = require("md-drafting.lib.section")
+local syntax = require("md-drafting.syntax")
+local util = require("md-drafting.lib.util")
 
 -- Quote a run of lines, optionally under a callout header. A callout is a block
 -- quote with a "> [!TYPE]" line on top of it.
@@ -19,11 +21,10 @@ local function quote_range(bufnr, range, callout_type)
 
   local quoted = {}
   if callout_type then
-    table.insert(quoted, "> [!" .. callout_type .. "]")
+    table.insert(quoted, syntax.format_callout(callout_type))
   end
   for _, line in ipairs(lines) do
-    -- A blank line becomes a bare "> ".
-    table.insert(quoted, line:match("^%s*$") and "> " or "> " .. line)
+    table.insert(quoted, syntax.format_quote(line))
   end
 
   vim.api.nvim_buf_set_lines(bufnr, start_line - 1, end_line, false, quoted)
@@ -51,74 +52,48 @@ end
 function M.generate_toc()
   local bufnr = vim.api.nvim_get_current_buf()
 
-  -- Find existing TOC
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local toc_start, toc_end
-  for i, line in ipairs(lines) do
-    if string.find(line, "<!-- TOC -->", 1, true) then
-      toc_start = i
-    elseif string.find(line, "<!-- /TOC -->", 1, true) then
-      toc_end = i
-    end
-  end
+  local toc_start, toc_end = section.find(lines, "TOC")
 
   local root = util.ts_root(bufnr)
-
   local query = vim.treesitter.query.parse("markdown", "(atx_heading) @heading")
-  local toc = { "<!-- TOC -->" }
+  local body = {}
 
   for _, match, _ in query:iter_captures(root, bufnr, 0, -1) do
-    local start_row, _, _, _ = match:range()
-    -- if we have a toc, and the heading is inside it, skip
-    if not (toc_start and toc_end and start_row + 1 >= toc_start and start_row + 1 <= toc_end) then
-      local node_text = vim.treesitter.get_node_text(match, bufnr)
-      local level = 0
-      for i = 1, #node_text do
-        if node_text:sub(i, i) == "#" then
-          level = level + 1
-        else
-          break
-        end
-      end
-      local header_text = node_text:match("#+%s*(.*)")
-      if header_text then
-        header_text = header_text:gsub("^%s+", ""):gsub("%s+$", "")
-      end
-      if header_text and header_text ~= "" then
-        -- Underscores survive the slug, as they do in GitHub's anchors.
-        local link_text = header_text:gsub("[^%w%s_-]", ""):gsub("%s", "-"):lower()
-        table.insert(toc, string.rep("  ", level - 1) .. "- [" .. header_text .. "](#" .. link_text .. ")")
+    local row = match:range() + 1
+    -- A heading the last run wrote into the table of contents is not one of the
+    -- document's own headings.
+    if not (toc_start and toc_end and row >= toc_start and row <= toc_end) then
+      local level, heading = syntax.parse_heading(vim.treesitter.get_node_text(match, bufnr))
+      if heading and heading ~= "" then
+        local entry = syntax.format_link(heading, syntax.format_anchor(heading))
+        table.insert(body, syntax.format_list_item(string.rep("  ", level - 1) .. "- ", nil, entry))
       end
     end
   end
-  table.insert(toc, "<!-- /TOC -->")
 
-  if toc_start and toc_end then
-    vim.api.nvim_buf_set_lines(bufnr, toc_start - 1, toc_end, false, {}) -- Delete old TOC
-    vim.api.nvim_buf_set_lines(bufnr, toc_start - 1, toc_start - 1, false, toc) -- Insert new TOC
-  else
-    vim.api.nvim_buf_set_lines(
-      bufnr,
-      vim.api.nvim_win_get_cursor(0)[1] - 1,
-      vim.api.nvim_win_get_cursor(0)[1] - 1,
-      false,
-      toc
-    )
-  end
+  -- With no markers in the file yet, the table of contents is written where the
+  -- cursor is: the writer is the one who knows where it belongs.
+  section.regenerate(bufnr, "TOC", body, { at = vim.api.nvim_win_get_cursor(0)[1] })
 end
 
 function M.add_table()
   local cols = tonumber(util.prompt("Enter number of columns: "))
-
   if not cols or cols <= 0 then
     vim.notify("Invalid input. Please enter a positive number for columns.", vim.log.levels.ERROR)
     return
   end
 
+  local blank, delimiter = {}, {}
+  for _ = 1, cols do
+    table.insert(blank, "")
+    table.insert(delimiter, "---")
+  end
+
   local tbl = {
-    "|" .. string.rep("  |", cols),
-    "|" .. string.rep(" --- |", cols),
-    "|" .. string.rep("  |", cols),
+    syntax.format_table_row(blank),
+    syntax.format_table_row(delimiter),
+    syntax.format_table_row(blank),
   }
 
   local bufnr = vim.api.nvim_get_current_buf()
@@ -197,7 +172,7 @@ function M.prepare_link(opts)
       return
     end
 
-    insert_link(bufnr, target, "[" .. text .. "](" .. url .. ")")
+    insert_link(bufnr, target, syntax.format_link(text, url))
   end
 end
 
@@ -217,8 +192,9 @@ function M.add_image()
     return
   end
 
-  local image = "![" .. alt_text .. "](" .. url .. ")"
+  local image = syntax.format_image(alt_text, url)
   local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+
   vim.api.nvim_buf_set_lines(vim.api.nvim_get_current_buf(), cursor_line - 1, cursor_line - 1, false, { image })
 end
 
@@ -249,23 +225,22 @@ function M.add_footnote()
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local max_num = 0
   for _, line in ipairs(lines) do
-    for num_str in line:gmatch("%[%^([%d]+)%]") do
-      local num = tonumber(num_str)
-      if num and num > max_num then
+    for _, num in ipairs(syntax.parse_footnote_refs(line)) do
+      if num > max_num then
         max_num = num
       end
     end
   end
   local footnote_num = max_num + 1
 
-  local footnote_marker = "[^" .. footnote_num .. "]"
+  local footnote_marker = syntax.format_footnote_ref(footnote_num)
   local lnum, col = unpack(vim.api.nvim_win_get_cursor(0))
   local at = util.word_end(bufnr, lnum, col)
 
   vim.api.nvim_buf_set_text(bufnr, lnum - 1, at, lnum - 1, at, { footnote_marker })
   vim.api.nvim_win_set_cursor(0, { lnum, at + #footnote_marker })
 
-  append_definition(bufnr, "[^" .. footnote_num .. "]: " .. text)
+  append_definition(bufnr, syntax.format_footnote_definition(footnote_num, text))
 end
 
 function M.add_code_block()
@@ -275,9 +250,9 @@ function M.add_code_block()
   end
 
   local code_block = {
-    "```" .. lang,
+    syntax.format_code_fence(lang),
     "",
-    "```",
+    syntax.format_code_fence(),
   }
   local bufnr = vim.api.nvim_get_current_buf()
   local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
@@ -308,9 +283,11 @@ local function reference_exists(bufnr, ref_name)
     return false
   end
 
+  local label = syntax.format_link_label(ref_name)
+
   for _, node, _ in query:iter_captures(util.ts_root(bufnr), bufnr) do
     for child in node:iter_children() do
-      if child:type() == "link_label" and vim.treesitter.get_node_text(child, bufnr) == "[" .. ref_name .. "]" then
+      if child:type() == "link_label" and vim.treesitter.get_node_text(child, bufnr) == label then
         return true
       end
     end
@@ -345,10 +322,10 @@ function M.prepare_reference_style_link(opts)
       end
     end
 
-    insert_link(bufnr, target, "[" .. text .. "][" .. ref_name .. "]")
+    insert_link(bufnr, target, syntax.format_reference_link(text, ref_name))
 
     if url then
-      append_definition(bufnr, "[" .. ref_name .. "]: " .. url)
+      append_definition(bufnr, syntax.format_reference_definition(ref_name, url))
     end
   end
 end
@@ -377,7 +354,7 @@ function M.prepare_callout(opts)
       local start_row = enclosing_block_quote_row(bufnr)
       if start_row then
         -- Already inside a qoute block
-        vim.api.nvim_buf_set_lines(bufnr, start_row, start_row, false, { "> [!" .. choice .. "]" })
+        vim.api.nvim_buf_set_lines(bufnr, start_row, start_row, false, { syntax.format_callout(choice) })
         return
       end
 

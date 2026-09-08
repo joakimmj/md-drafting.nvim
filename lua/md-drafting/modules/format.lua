@@ -1,6 +1,7 @@
 local M = {}
 
-local util = require("md-drafting.util")
+local syntax = require("md-drafting.syntax")
+local util = require("md-drafting.lib.util")
 
 -- Span of the word under the cursor, as 0-indexed columns with an exclusive
 -- end, or nil when there is no word to act on.
@@ -98,7 +99,7 @@ local function insert_empty_wrapper(bufnr, pattern, target)
     col = #line
   end
 
-  vim.api.nvim_buf_set_text(bufnr, target.row - 1, col, target.row - 1, col, { pattern .. pattern })
+  vim.api.nvim_buf_set_text(bufnr, target.row - 1, col, target.row - 1, col, { syntax.format_emphasis("", pattern) })
   util.start_insert(bufnr, target.win, target.row, col + #pattern)
 end
 
@@ -163,7 +164,8 @@ local function apply_format(bufnr, pattern, target)
     return
   end
 
-  vim.api.nvim_buf_set_text(bufnr, start_row, start_col, end_row, end_col, vim.split(pattern .. selection .. pattern, "\n"))
+  local wrapped = syntax.format_emphasis(selection, pattern)
+  vim.api.nvim_buf_set_text(bufnr, start_row, start_col, end_row, end_col, vim.split(wrapped, "\n"))
   resume_insert(bufnr, target, end_row + 1, start_col + #pattern * 2 + #selection)
 end
 
@@ -183,19 +185,19 @@ local function toggle_format(pattern, opts)
 end
 
 function M.toggle_bold(opts)
-  toggle_format("**", opts)
+  toggle_format(syntax.EMPHASIS.bold, opts)
 end
 
 function M.toggle_italic(opts)
-  toggle_format("*", opts)
+  toggle_format(syntax.EMPHASIS.italic, opts)
 end
 
 function M.toggle_strikethrough(opts)
-  toggle_format("~~", opts)
+  toggle_format(syntax.EMPHASIS.strikethrough, opts)
 end
 
 function M.toggle_inline_code(opts)
-  toggle_format("`", opts)
+  toggle_format(syntax.EMPHASIS.code, opts)
 end
 
 return M

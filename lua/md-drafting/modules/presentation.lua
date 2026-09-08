@@ -1,7 +1,8 @@
 local M = {}
 
 local config = require("md-drafting.config")
-local focused_view = require("md-drafting.focused_view")
+local focused_view = require("md-drafting.lib.focused_view")
+local syntax = require("md-drafting.syntax")
 
 local state = {
   view = nil,
@@ -46,36 +47,20 @@ function M.start_presentation()
   state.current_slide = 1
 
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local front_matter_end_line = 0
 
-  -- Manually parse frontmatter
-  if #lines > 1 and lines[1] == "---" then
-    for i = 2, #lines do
-      local line = lines[i]
-      if line == "---" then
-        front_matter_end_line = i
-        break
-      else
-        local key, value = line:match("([^:]+):%s*(.*)")
-        if key and value then
-          key = key:gsub("^%s*(.-)%s*$", "%1")
-          value = value:gsub("^%s*(.-)%s*$", "%1")
-          if key == "header_left" then
-            state.header_left = value
-          elseif key == "header_center" then
-            state.header_center = value
-          end
-        end
-      end
-    end
+  local fields, front_matter_end_line = syntax.parse_frontmatter(lines)
+  front_matter_end_line = front_matter_end_line or 0
+
+  for _, key in ipairs({ "header_left", "header_center" }) do
+    local value = fields and fields[key]
+    state[key] = type(value) == "string" and value or ""
   end
 
-  -- Manually split slides
+  -- Split slides on thematic breaks
   local current_slide_content = {}
   for i = front_matter_end_line + 1, #lines do
     local line = lines[i]
-    -- A thematic break is ---, ***, or ___
-    if line:match("^%s*([%-%*%_])%s*%1%s*%1%s*%s*$") then
+    if syntax.parse_thematic_break(line) then
       if #current_slide_content > 0 then
         table.insert(state.slides, table.concat(current_slide_content, "\n"))
         current_slide_content = {}
