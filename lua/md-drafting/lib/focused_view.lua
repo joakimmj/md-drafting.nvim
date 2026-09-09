@@ -137,10 +137,8 @@ function M.header_line(sections)
   local rendered = {}
 
   for _, name in ipairs({ "left", "center", "right" }) do
-    local section = sections[name] or ""
-    if type(section) == "string" then
-      section = { text = section }
-    end
+    local value = sections[name] or ""
+    local section = type(value) == "string" and { text = value } or value
 
     local text = (section.text or ""):gsub("%%", "%%%%")
     if section.hl then

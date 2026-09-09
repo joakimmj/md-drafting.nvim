@@ -5,6 +5,7 @@
 
 package.path = "lua/?.lua;lua/?/init.lua;" .. package.path
 
+local focused_view = require("md-drafting.lib.focused_view")
 local section = require("md-drafting.lib.section")
 local syntax = require("md-drafting.syntax")
 local text = require("md-drafting.lib.text")
@@ -277,6 +278,26 @@ check("regenerate, an existing section ignores at", regenerate(document, { "- [N
   "",
   "Prose.",
 })
+
+-- lib: focused_view header
+
+local header_line = focused_view.header_line
+
+check("header_line, a section given as a string", header_line({ left = "note.md" }), " note.md%=%= ")
+check(
+  "header_line, every section",
+  header_line({ left = "My Talk", center = "Introduction", right = "1/7" }),
+  " My Talk%=Introduction%=1/7 "
+)
+check("header_line, nothing given", header_line({}), " %=%= ")
+check(
+  "header_line, a section with a highlight group",
+  header_line({ right = { text = "12 lines", hl = "Comment" } }),
+  " %=%=%#Comment#12 lines%* "
+)
+-- Winbar content is parsed as a statusline, so text out of the document has to
+-- come back escaped rather than read as an item.
+check("header_line, percent escaped", header_line({ left = "100% done" }), " 100%% done%=%= ")
 
 if failures > 0 then
   io.stderr:write(("\n%d of %d checks failed\n"):format(failures, checks))

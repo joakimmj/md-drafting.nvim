@@ -75,12 +75,19 @@ function M.open_menu(names, opts)
     return
   end
 
-  names = type(names) == "string" and { names } or names
+  ---@type string[]
+  local menus
+  if type(names) == "string" then
+    menus = { names }
+  else
+    menus = names
+  end
+
   opts = opts or {}
 
   local known = known_menus()
   local wanted = {}
-  for _, name in ipairs(names) do
+  for _, name in ipairs(menus) do
     if not known[name] then
       vim.notify(("md-drafting: no action menu named %q"):format(name), vim.log.levels.ERROR)
       return
@@ -110,7 +117,7 @@ function M.open_menu(names, opts)
   end
 
   vim.ui.select(choices, {
-    prompt = prompt_for(names),
+    prompt = prompt_for(menus),
     format_item = function(choice)
       return choice.label
     end,

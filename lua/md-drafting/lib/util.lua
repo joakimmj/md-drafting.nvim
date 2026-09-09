@@ -105,8 +105,19 @@ end
 
 -- Root of the buffer's markdown syntax tree.
 function M.ts_root(bufnr)
-  local parser = vim.treesitter.get_parser(bufnr, "markdown")
-  return parser:parse()[1]:root()
+  local parser, err = vim.treesitter.get_parser(bufnr, "markdown")
+  if not parser then
+    vim.notify(("md-drafting: no markdown treesitter parser: %s"):format(err or "unknown reason"), vim.log.levels.ERROR)
+    return nil
+  end
+
+  local trees = parser:parse()
+  if trees and trees[1] then
+    return trees[1]:root()
+  end
+
+  vim.notify("md-drafting: could not parse the buffer as markdown", vim.log.levels.ERROR)
+  return nil
 end
 
 return M

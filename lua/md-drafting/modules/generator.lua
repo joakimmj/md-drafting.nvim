@@ -39,7 +39,12 @@ end
 -- cursor is not inside one.
 local function enclosing_block_quote_row(bufnr)
   local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-  local node = util.ts_root(bufnr):descendant_for_range(row - 1, col, row - 1, col)
+  local root = util.ts_root(bufnr)
+  if not root then
+    return nil
+  end
+
+  local node = root:descendant_for_range(row - 1, col, row - 1, col)
 
   while node do
     if node:type() == "block_quote" then
@@ -56,6 +61,10 @@ function M.generate_toc()
   local toc_start, toc_end = section.find(lines, "TOC")
 
   local root = util.ts_root(bufnr)
+  if not root then
+    return
+  end
+
   local query = vim.treesitter.query.parse("markdown", "(atx_heading) @heading")
   local body = {}
 
@@ -107,7 +116,7 @@ end
 local function link_target(bufnr, opts)
   local text, range = util.selected_text(bufnr, opts)
 
-  if text and text ~= "" then
+  if range and text and text ~= "" then
     return {
       text = text,
       start_line = range[1],
@@ -283,9 +292,14 @@ local function reference_exists(bufnr, ref_name)
     return false
   end
 
+  local root = util.ts_root(bufnr)
+  if not root then
+    return false
+  end
+
   local label = syntax.format_link_label(ref_name)
 
-  for _, node, _ in query:iter_captures(util.ts_root(bufnr), bufnr) do
+  for _, node, _ in query:iter_captures(root, bufnr) do
     for child in node:iter_children() do
       if child:type() == "link_label" and vim.treesitter.get_node_text(child, bufnr) == label then
         return true
