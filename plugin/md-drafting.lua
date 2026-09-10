@@ -49,6 +49,17 @@ vim.api.nvim_create_autocmd("FileType", {
       drafting.generator.add_block_quote,
       { range = true }
     )
+    for command, jump in pairs({ MdJumpNext = drafting.jump.next, MdJumpPrevious = drafting.jump.previous }) do
+      vim.api.nvim_buf_create_user_command(bufnr, command, function(opts)
+        jump(opts.args)
+      end, {
+        nargs = 1,
+        complete = function()
+          return drafting.jump.target_names()
+        end,
+      })
+    end
+
     vim.api.nvim_buf_create_user_command(bufnr, "MdActions", function(opts)
       if #opts.fargs > 0 then
         drafting.actions.open_menu(opts.fargs, opts)

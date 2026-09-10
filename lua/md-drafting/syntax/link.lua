@@ -40,4 +40,46 @@ function M.format_reference_definition(ref, url)
   return M.format_link_label(ref) .. ": " .. url
 end
 
+--- Every inline link in a string, images skipped.
+---@param content string Text to scan
+---@return { text: string, path: string, col: integer }[] links Links in order, col 0-based at the "["
+function M.parse_links(content)
+  local links = {}
+  local at = 1
+
+  while true do
+    local start_col, end_col, text, path = content:find("%[([^%]]*)%]%(([^%)]*)%)", at)
+    if not start_col then
+      return links
+    end
+
+    if content:sub(start_col - 1, start_col - 1) ~= "!" then
+      table.insert(links, { text = text, path = path, col = start_col - 1 })
+    end
+
+    at = end_col + 1
+  end
+end
+
+--- Every reference-style link in a string, reference-style images skipped.
+---@param content string Text to scan
+---@return { text: string, ref: string, col: integer }[] links Links in order, col 0-based at the "["
+function M.parse_reference_links(content)
+  local links = {}
+  local at = 1
+
+  while true do
+    local start_col, end_col, text, ref = content:find("%[([^%]]*)%]%[([^%]]*)%]", at)
+    if not start_col then
+      return links
+    end
+
+    if content:sub(start_col - 1, start_col - 1) ~= "!" then
+      table.insert(links, { text = text, ref = ref, col = start_col - 1 })
+    end
+
+    at = end_col + 1
+  end
+end
+
 return M

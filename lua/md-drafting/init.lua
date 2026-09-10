@@ -28,6 +28,7 @@ M.typewriter = require("md-drafting.modules.typewriter")
 M.format = require("md-drafting.modules.format")
 M.task = require("md-drafting.modules.task")
 M.generator = require("md-drafting.modules.generator")
+M.jump = require("md-drafting.modules.jump")
 M.actions = require("md-drafting.lib.actions")
 
 -- Action menus
@@ -111,6 +112,32 @@ M.actions.register("view", {
 M.actions.register("view", {
   label = "Toggle focus mode",
   run = M.focus.toggle,
+})
+
+M.actions.register("view", {
+  label = "Jump to next...",
+  run = function()
+    vim.ui.select(M.jump.target_names(), {
+      prompt = "Jump to next:",
+    }, function(choice)
+      if choice then
+        M.jump.next(choice)
+      end
+    end)
+  end,
+})
+
+M.actions.register("view", {
+  label = "Jump to prev...",
+  run = function()
+    vim.ui.select(M.jump.target_names(), {
+      prompt = "Jump to previous:",
+    }, function(choice)
+      if choice then
+        M.jump.previous(choice)
+      end
+    end)
+  end,
 })
 
 M.actions.register("view", {

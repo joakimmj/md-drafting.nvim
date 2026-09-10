@@ -45,6 +45,34 @@ function M.parse_list_item(line)
   return prefix, marker, (after:gsub("^%s+", "", 1))
 end
 
+--- Default markers (GitHub-flavored)
+---@type { open: string[], done: string[] }
+local DEFAULT_MARKERS = {
+  open = { "[ ]" },
+  done = { "[x]", "[X]" },
+}
+
+--- Which state a list item's checkbox is in, or nil when it carries none.
+---@param line string Line to read
+---@param markers? { open: string[], done: string[] } Markers per state
+---@return "open"|"done"|nil state Checkbox state, or nil when there is no checkbox
+function M.parse_checkbox(line, markers)
+  local _, marker = M.parse_list_item(line)
+  if not marker then
+    return nil
+  end
+
+  markers = markers or DEFAULT_MARKERS
+
+  for _, state in ipairs({ "open", "done" }) do
+    for _, candidate in ipairs(markers[state] or {}) do
+      if candidate == marker then
+        return state
+      end
+    end
+  end
+end
+
 --- Put one back together, the exact inverse of parse_list_item.
 ---@param prefix string Bullet prefix
 ---@param marker string? Bracketed marker, or nil for a plain list item

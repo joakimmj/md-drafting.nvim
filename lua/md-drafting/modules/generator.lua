@@ -234,9 +234,9 @@ function M.add_footnote()
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local max_num = 0
   for _, line in ipairs(lines) do
-    for _, num in ipairs(syntax.parse_footnote_refs(line)) do
-      if num > max_num then
-        max_num = num
+    for _, footnote in ipairs(syntax.parse_footnote_refs(line)) do
+      if footnote.n > max_num then
+        max_num = footnote.n
       end
     end
   end

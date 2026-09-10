@@ -19,6 +19,8 @@ built-in presentation and focus modes.
   empty one (default: GitHub Flavored callouts).
 - **Generators:** Quickly create tables, links, images, footnotes, code blocks,
   block quotes, and reference-style links.
+- **Jump Navigation:** Move to the next or previous link, reference-style link,
+  heading, task, code block, table, thematic break or footnote.
 - **Presentation Mode:** View your markdown file as a slide deck directly
   within Neovim.
 - **Focus Mode:** A distraction-free writing view — the document centered on
@@ -195,6 +197,14 @@ vim.api.nvim_create_autocmd("FileType", {
     vim.keymap.set("n", "<leader>mp", md.presentation.start_presentation, vim.tbl_extend("force", opts, { desc = "Start Presentation" }))
     vim.keymap.set("n", "<leader>mF", md.focus.toggle, vim.tbl_extend("force", opts, { desc = "Toggle Focus Mode" }))
     vim.keymap.set("n", "<leader>mw", md.typewriter.toggle, vim.tbl_extend("force", opts, { desc = "Toggle Typewriter" }))
+
+    -- Jump navigation, one mapping pair per construct you care about
+    vim.keymap.set("n", "]l", function()
+      md.jump.next(md.jump.TARGETS.LINK)
+    end, vim.tbl_extend("force", opts, { desc = "Next Link" }))
+    vim.keymap.set("n", "[l", function()
+      md.jump.previous(md.jump.TARGETS.LINK)
+    end, vim.tbl_extend("force", opts, { desc = "Previous Link" }))
   end,
 })
 ```
@@ -354,6 +364,31 @@ The markers are inserted at the cursor the first time and rewritten in place
 afterwards, so regenerating is safe to repeat and picks up headings added or
 removed since. Anchors follow GitHub's slugs: lowercased, spaces turned into
 hyphens, punctuation dropped, underscores kept.
+
+### Jump navigation
+
+Move the cursor to the next or previous occurrence of a markdown construct:
+
+```lua
+md.jump.next(md.jump.TARGETS.HEADING)
+md.jump.previous(md.jump.TARGETS.OPEN_TASK)
+```
+
+Both wrap around the buffer — the last match jumps to the first — and both are
+no-ops with a message when the buffer holds no match at all, rather than jumping
+to where the cursor already is.
+
+| Target | Moves between |
+|---|---|
+| `LINK` | inline links, images skipped |
+| `REFERENCE_LINK` | reference-style links and the definitions they point at |
+| `HEADING` | `#` through `######`, read from the syntax tree, so a `#` inside a fenced code block is not one |
+| `TASK` | list items carrying a checkbox, whatever its state |
+| `OPEN_TASK` | list items whose checkbox is `[ ]` |
+| `CODE_BLOCK` | fenced code blocks |
+| `TABLE` | tables |
+| `THEMATIC_BREAK` | `---`, `***`, `___` |
+| `FOOTNOTE` | footnote references and their definitions |
 
 ### Presentation mode
 
@@ -576,6 +611,8 @@ in markdown buffers:
 | `:MdAddFootnote` | Insert a footnote and its definition |
 | `:MdAddCodeBlock` | Insert a fenced code block |
 | `:MdAddBlockQuote` | Quote the current line or selection |
+| `:MdJumpNext <target>` | Move to the next occurrence of a construct |
+| `:MdJumpPrevious <target>` | Move to the previous occurrence of a construct |
 | `:MdPresent` | Start presentation mode |
 | `:MdFocus` | Toggle focus mode |
 | `:MdTypewriter` | Toggle typewriter scrolling |
@@ -607,6 +644,10 @@ in markdown buffers:
 | `md.generator.add_code_block()` | Insert a fenced code block |
 | `md.generator.add_block_quote(opts?)` | Quote the current line or selection |
 | `md.generator.prepare_block_quote(opts?)` | Resolve the target now, returning a function that quotes it later |
+| `md.jump.next(target)` | Move to the next occurrence of a construct, wrapping to the first |
+| `md.jump.previous(target)` | Move to the previous occurrence, wrapping to the last |
+| `md.jump.target_names()` | The target names, in the order the menu offers them |
+| `md.jump.TARGETS` | The targets, by name |
 | `md.presentation.start_presentation()` | Start presentation mode |
 | `md.focus.toggle()` | Toggle focus mode |
 | `md.typewriter.toggle(bufnr?)` | Toggle typewriter scrolling |

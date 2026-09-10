@@ -83,6 +83,30 @@ check(
   syntax.format_reference_definition("nvim", "https://neovim.io"),
   "[nvim]: https://neovim.io"
 )
+check("parse_links, none", syntax.parse_links("plain prose"), {})
+check("parse_links, one", syntax.parse_links("see [Note](note.md)"), { { text = "Note", path = "note.md", col = 4 } })
+check("parse_links, several", syntax.parse_links("[a](one.md) and [b](two.md)"), {
+  { text = "a", path = "one.md", col = 0 },
+  { text = "b", path = "two.md", col = 16 },
+})
+check("parse_links, an image is skipped", syntax.parse_links("![Diagram](d.png)"), {})
+check(
+  "parse_links, a link beside an image",
+  syntax.parse_links("![Diagram](d.png) [Note](note.md)"),
+  { { text = "Note", path = "note.md", col = 18 } }
+)
+check("parse_links, empty text", syntax.parse_links("[](note.md)"), { { text = "", path = "note.md", col = 0 } })
+check("parse_links, a reference-style link is not one", syntax.parse_links("[text][ref]"), {})
+check("parse_reference_links, none", syntax.parse_reference_links("plain prose"), {})
+check("parse_reference_links, one", syntax.parse_reference_links("see [docs][nvim]"), {
+  { text = "docs", ref = "nvim", col = 4 },
+})
+check("parse_reference_links, an inline link is not one", syntax.parse_reference_links("[Note](note.md)"), {})
+check("parse_reference_links, collapsed", syntax.parse_reference_links("[nvim][]"), {
+  { text = "nvim", ref = "", col = 0 },
+})
+check("parse_reference_links, an image is skipped", syntax.parse_reference_links("![Diagram][d]"), {})
+check("parse_reference_links, a definition is not one", syntax.parse_reference_links("[nvim]: https://neovim.io"), {})
 
 -- syntax: list items
 
@@ -116,6 +140,16 @@ for _, line in ipairs({ "- [x] done", "  * plain", "+ [~] maybe", "- [ ]", "1. f
   check(name, syntax.format_list_item(syntax.parse_list_item(line)), line)
 end
 
+check("parse_checkbox, not a list item", syntax.parse_checkbox("plain prose"), nil)
+check("parse_checkbox, a plain list item", syntax.parse_checkbox("- write it up"), nil)
+check("parse_checkbox, open", syntax.parse_checkbox("- [ ] write it up"), "open")
+check("parse_checkbox, done", syntax.parse_checkbox("- [x] written"), "done")
+check("parse_checkbox, done uppercase", syntax.parse_checkbox("- [X] written"), "done")
+check("parse_checkbox, an unknown marker", syntax.parse_checkbox("- [~] halfway"), nil)
+check("parse_checkbox, a link is not a marker", syntax.parse_checkbox("- [Note](note.md) matters"), nil)
+check("parse_checkbox, replaced markers", syntax.parse_checkbox("- [~] halfway", { open = { "[~]" } }), "open")
+check("parse_checkbox, replaced markers drop the default", syntax.parse_checkbox("- [ ] task", { open = { "[~]" } }), nil)
+
 -- syntax: headings and anchors
 
 local function heading(line)
@@ -147,8 +181,12 @@ check("format_callout", syntax.format_callout("NOTE"), "> [!NOTE]")
 check("format_footnote_ref", syntax.format_footnote_ref(3), "[^3]")
 check("format_footnote_definition", syntax.format_footnote_definition(3, "a source"), "[^3]: a source")
 check("parse_footnote_refs, none", syntax.parse_footnote_refs("plain prose"), {})
-check("parse_footnote_refs, several", syntax.parse_footnote_refs("a[^1] b[^12] c"), { 1, 12 })
-check("parse_footnote_refs, a definition", syntax.parse_footnote_refs("[^4]: a source"), { 4 })
+check(
+  "parse_footnote_refs, several",
+  syntax.parse_footnote_refs("a[^1] b[^12] c"),
+  { { n = 1, col = 1 }, { n = 12, col = 7 } }
+)
+check("parse_footnote_refs, a definition", syntax.parse_footnote_refs("[^4]: a source"), { { n = 4, col = 0 } })
 
 -- syntax: tables
 
