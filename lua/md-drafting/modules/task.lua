@@ -1,3 +1,4 @@
+-- Cycling the checkbox on the list item under the cursor.
 local M = {}
 
 local config = require("md-drafting.config")
@@ -16,6 +17,8 @@ local function index_of(marker, cycle)
   end
 end
 
+--- Cycle the list item under the cursor: plain, then each configured marker in
+--- order, then plain again.
 function M.toggle()
   local bufnr = vim.api.nvim_get_current_buf()
   local lnum = vim.api.nvim_win_get_cursor(0)[1]

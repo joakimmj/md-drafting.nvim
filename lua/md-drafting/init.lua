@@ -22,6 +22,8 @@ local function merge(defaults, opts)
   return merged
 end
 
+--- Merge the user's options over the defaults and check the numeric ones.
+---@param opts? table Options
 function M.setup(opts)
   config.options = merge(config.options, opts or {})
 

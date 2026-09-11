@@ -1,3 +1,4 @@
+-- Named menus of actions, and the picker that offers them.
 local M = {}
 
 ---@class RunAction
@@ -15,9 +16,9 @@ local M = {}
 ---@type ActionMenuItem[]
 M.action_menus = {}
 
----@param menu string The menu the action belongs in. Register the same action
----again to put it in a second menu: opening both offers it once.
----@param action RunAction | PrepareAction
+--- Add an action to a menu, creating the menu if it is a new name.
+---@param menu string Menu the action belongs in
+---@param action RunAction | PrepareAction Action to offer
 function M.register(menu, action)
   if type(menu) ~= "string" or menu == "" then
     vim.notify("md-drafting: an action has to be registered to a menu", vim.log.levels.ERROR)
@@ -37,7 +38,8 @@ function M.register(menu, action)
   table.insert(M.action_menus, { menu = menu, action = action })
 end
 
----@return table<string, boolean>
+--- Every menu something is registered to.
+---@return table<string, boolean> menus Menu names, as a set
 local function known_menus()
   local menus = {}
   for _, item in ipairs(M.action_menus) do
@@ -46,16 +48,17 @@ local function known_menus()
   return menus
 end
 
--- The registered menu names, sorted, for completion.
----@return string[]
+--- The registered menu names, sorted, for completion.
+---@return string[] names Menu names
 function M.menu_names()
   local names = vim.tbl_keys(known_menus())
   table.sort(names)
   return names
 end
 
----@param names string[]
----@return string
+--- What the picker calls itself: one menu is named, several are not.
+---@param names string[] Menus being offered
+---@return string prompt Picker prompt
 local function prompt_for(names)
   if #names == 1 then
     return names[1]:sub(1, 1):upper() .. names[1]:sub(2) .. ":"
@@ -63,9 +66,9 @@ local function prompt_for(names)
   return "Actions:"
 end
 
----@param names string | string[] Menu, or menus, to offer. Several menus are
----shown as one picker, in registration order.
----@param opts? table
+--- Offer one menu, or several as a single picker in registration order.
+---@param names string | string[] Menu, or menus, to offer
+---@param opts? table Options a user command was called with
 function M.open_menu(names, opts)
   if names == nil then
     vim.notify(
@@ -128,8 +131,8 @@ function M.open_menu(names, opts)
   end)
 end
 
--- Every action, whichever menu it was registered to.
----@param opts? table
+--- Offer every action, whichever menu it was registered to.
+---@param opts? table Options a user command was called with
 function M.open_all(opts)
   M.open_menu(M.menu_names(), opts)
 end

@@ -1,0 +1,684 @@
+*md-drafting.txt*	Markdown drafting tools for Neovim		*md-drafting*
+
+Author:  joakimmj
+License: MIT
+
+==============================================================================
+CONTENTS                                            *md-drafting-contents*
+
+    1. Introduction ....................... |md-drafting-introduction|
+    2. Requirements ....................... |md-drafting-requirements|
+    3. Configuration ...................... |md-drafting-config|
+    4. Mappings ........................... |md-drafting-mappings|
+    5. Actions menus ...................... |md-drafting-actions|
+    6. Formatting ......................... |md-drafting-format|
+    7. Tasks .............................. |md-drafting-tasks|
+    8. Quotes and callouts ................ |md-drafting-callouts|
+    9. Table of contents .................. |md-drafting-toc|
+   10. Jump navigation .................... |md-drafting-jump|
+   11. Presentation mode .................. |md-drafting-presentation|
+   12. Focus mode ......................... |md-drafting-focus|
+   13. Typewriter scrolling ............... |md-drafting-typewriter|
+   14. Window options ..................... |md-drafting-win-opts|
+   15. Colors ............................ |md-drafting-colors|
+   16. Commands ........................... |md-drafting-commands|
+   17. API ................................ |md-drafting-api|
+
+==============================================================================
+1. INTRODUCTION                                 *md-drafting-introduction*
+
+md-drafting.nvim is a set of markdown editing tools: formatting toggles, task
+cycling, table of contents generation, callouts, generators for the constructs
+that are tedious to type, jump navigation, and two full-screen views —
+presentation mode and focus mode.
+
+Nothing is mapped by default except navigation inside presentation mode, which
+owns its own buffer. See |md-drafting-mappings|.
+
+==============================================================================
+2. REQUIREMENTS                                 *md-drafting-requirements*
+
+nvim-treesitter with the `markdown` and `markdown_inline` parsers installed.
+The syntax tree is what tells a heading from a "#" inside a fenced code block,
+and a reference definition from a line that looks like one.
+
+==============================================================================
+3. CONFIGURATION                                        *md-drafting-config*
+
+Configure through `setup()`. Every value below is the default, so an empty
+call, or none at all, gives exactly this: >lua
+
+    require("md-drafting").setup({
+      -- Add a user command for every function, in markdown buffers.
+      add_commands = false,
+
+      -- Checkbox markers, grouped by meaning.
+      task_states = {
+        not_done = { "[ ]" },
+        done = { "[x]" },
+      },
+
+      -- Callout types offered by `add_callout`.
+      callout_types = { "NOTE", "TIP", "IMPORTANT", "WARNING", "CAUTION" },
+
+      presentation = {
+        width = 80,
+        header_gap = 1,
+        win_opts = { wrap = true, linebreak = true },
+        keymaps = { next = "n", previous = "p", quit = "q" },
+      },
+
+      focus_mode = {
+        width = 80,
+        header_gap = 1,
+        stats = { "words", "lines" },
+        typewriter = true,
+        win_opts = {
+          wrap = true,
+          linebreak = true,
+          conceallevel = 2,
+          cursorline = false,
+          spell = false,
+        },
+      },
+
+      typewriter = {
+        position = 0.5,
+      },
+    })
+<
+                                                 *md-drafting-config-merge*
+How your options merge~
+
+Which of the two an option is comes from the default it replaces. A map merges
+by key, so naming one `win_opts` entry replaces that one and leaves the rest
+alone. A list replaces wholesale, so a two-entry `callout_types` is the whole
+list rather than the first two entries of the default one.
+
+                                                 *md-drafting-config-width*
+width~
+
+`presentation.width` and `focus_mode.width` are read the same way. A value of
+1 or more is a number of columns; a value between 0 and 1 is a fraction of the
+terminal width. Whatever is left over becomes the margin on either side. Both
+are clamped to the terminal, so a narrow terminal degrades to full width
+rather than overflowing. >lua
+
+    presentation = { width = 0.6 },   -- 60% of the terminal width
+<
+                                                   *md-drafting-config-gap*
+header_gap~
+
+Blank rows between the heading and the content. Set to 0 to sit the heading
+directly on top. Those rows take the content window's own background, so they
+read as the top of the page rather than as margin.
+
+                                                 *md-drafting-config-stats*
+focus_mode.stats~
+
+What the focus mode heading counts, in the order shown. "words" and "lines"
+are the ones that ship: >lua
+
+    focus_mode = { stats = { "lines", "words" } },   -- "12 lines · 142 words"
+<
+The counts refresh on |TextChanged| and |TextChangedI|, not on cursor
+movement, which cannot change them.
+
+==============================================================================
+4. MAPPINGS                                           *md-drafting-mappings*
+
+The plugin sets no mappings, with the single exception of presentation mode,
+which owns buffer-local navigation keys because they only mean anything inside
+the view it creates. Focus mode gets no such exception: it is a writing view,
+so every letter key belongs to you.
+
+Bind what you use from a |FileType| autocommand: >lua
+
+    vim.api.nvim_create_autocmd("FileType", {
+      pattern = "markdown",
+      callback = function()
+        local md = require("md-drafting")
+        local opts = { buffer = true }
+
+        -- Everything from one mapping
+        vim.keymap.set({ "n", "v" }, "<leader>ma", md.actions.open_all, opts)
+        vim.keymap.set("i", "<C-c>", md.actions.open_all, opts)
+
+        -- ... or a named menu on its own
+        vim.keymap.set({ "n", "v" }, "<leader>mm", function()
+          md.actions.open_menu("formatting")
+        end, opts)
+
+        local set = vim.keymap.set
+        set({ "n", "v" }, "<leader>mfb", md.format.toggle_bold, opts)
+        set("n", "<leader>mt", md.task.toggle, opts)
+        set("n", "<leader>mo", md.generator.generate_toc, opts)
+        set("n", "<leader>mp", md.presentation.start_presentation, opts)
+        set("n", "<leader>mF", md.focus.toggle, opts)
+        set("n", "<leader>mw", md.typewriter.toggle, opts)
+
+        -- One pair per construct you jump between
+        vim.keymap.set("n", "]l", function()
+          md.jump.next(md.jump.TARGETS.LINK)
+        end, opts)
+        vim.keymap.set("n", "[l", function()
+          md.jump.previous(md.jump.TARGETS.LINK)
+        end, opts)
+      end,
+    })
+<
+Every function that can be bound is listed under |md-drafting-api|.
+
+Functions taking `opts` accept the table Neovim passes to a user command and
+use its `range` to tell whether a selection was given. Called from a mapping
+with no arguments they work it out from the current mode instead, so binding
+them directly is fine.
+
+==============================================================================
+5. ACTIONS MENUS                                       *md-drafting-actions*
+
+Every action belongs to one or more named menus. `md.actions.open_all()`
+offers all of them in a |vim.ui.select()| picker, so one mapping reaches
+everything; `md.actions.open_menu(name)` offers a single menu, for a mapping
+that stays closer to the task at hand. Either way the picker works on a visual
+selection, on the word under the cursor, or on nothing in particular, exactly
+as the individual functions do.
+
+Three menus ship with the plugin:
+
+    formatting      Bold, Italic, Strikethrough, Inline code, Toggle task
+    insert          Generate TOC, Add callout, Add table, Add link, Add image,
+                    Add footnote, Add reference-style link, Add code block,
+                    Add block quote
+    view            Start presentation, Toggle focus mode, Jump to next...,
+                    Jump to prev..., Toggle typewriter scrolling
+
+                                                *md-drafting-actions-register*
+Registering your own~
+
+Features you add can join those menus rather than growing a second one, or
+open a menu of their own — a menu exists as soon as something is registered to
+it: >lua
+
+    require("md-drafting").actions.register("insert", {
+      label = "Insert today's date",
+      run = function()
+        vim.api.nvim_put({ os.date("%Y-%m-%d") }, "c", true, true)
+      end,
+    })
+<
+                                                 *md-drafting-actions-prepare*
+run versus prepare~
+
+An action declares either `run(opts)`, performed once chosen, or
+`prepare(opts)`, called while the menu is being built and returning the
+function to run.
+
+`prepare` exists because |vim.ui.select()| is asynchronous: visual mode has
+already been left by the time a choice comes back, so anything acting on a
+selection has to resolve it up front. `md.format.prepare`,
+`md.generator.prepare_link`, `md.generator.prepare_reference_style_link`,
+`md.generator.prepare_block_quote` and `md.generator.prepare_callout` are the
+same idea for the features that ship, and are how those entries are
+registered: >lua
+
+    require("md-drafting").actions.register("formatting", {
+      label = "Highlight",
+      prepare = function(opts)
+        return require("md-drafting").format.prepare("==", opts)
+      end,
+    })
+<
+                                                  *md-drafting-actions-reuse*
+One action, several menus~
+
+An action goes in one menu per `register` call. Register the same action table
+again to put it in a second menu; opening both menus together offers it once,
+since the picker recognizes it as the same action: >lua
+
+    local md = require("md-drafting")
+
+    local rule = {
+      label = "Add a horizontal rule",
+      run = function()
+        vim.api.nvim_put({ "---" }, "l", true, true)
+      end,
+    }
+
+    md.actions.register("formatting", rule)
+    md.actions.register("insert", rule)
+
+    -- One picker, both menus, in registration order, the rule listed once
+    md.actions.open_menu({ "formatting", "insert" })
+<
+==============================================================================
+6. FORMATTING                                           *md-drafting-format*
+
+The formatting toggles work in three ways, and toggling a second time always
+undoes the first:
+
+    Visual selection        The selection is wrapped, or unwrapped if it
+                            already is
+    Cursor on a word        That word is wrapped, or unwrapped if it
+                            already is
+    Cursor on whitespace    An empty pair is inserted, in insert mode between
+                            the markers
+
+Unwrapping recognizes the markers whether they fall inside the selection or
+just outside it, so putting the cursor anywhere in `**word**` and toggling
+bold gives back `word`.
+
+A marker pair is only consumed when it is not part of a longer run, so
+toggling italic inside bold text nests as `***word***` rather than mangling
+the bold markers.
+
+Reaching for a format while in insert mode leaves you in insert mode, with the
+cursor after the formatted text, so mid-sentence formatting does not interrupt
+typing.
+
+==============================================================================
+7. TASKS                                                 *md-drafting-tasks*
+
+`md.task.toggle()` cycles the list item under the cursor: >markdown
+
+    - buy milk        →  - [ ] buy milk  →  - [x] buy milk  →  - buy milk
+<
+Bulleted (`-`, `*`, `+`) and numbered (`1.`, `1)`) list items are both cycled,
+nested ones included: >markdown
+
+    1. buy milk       →  1. [ ] buy milk →  1. [x] buy milk →  1. buy milk
+<
+The markers come from `task_states`, which groups them by meaning. The cycle
+runs through `not_done` in order, then `done` in order, so a third state is a
+matter of configuration: >lua
+
+    require("md-drafting").setup({
+      task_states = {
+        not_done = { "[ ]", "[/]" },
+        done = { "[x]" },
+      },
+    })
+<
+A plain list item is not one of the states: it is where the cycle starts, and
+cycling past the last marker returns to it.
+
+The grouping is what the `not_done_task` jump target reads, so a configured
+cycle is navigated by the same markers it is toggled through. See
+|md-drafting-jump|.
+
+==============================================================================
+8. QUOTES AND CALLOUTS                                *md-drafting-callouts*
+
+A callout is a block quote with a `> [!TYPE]` line on top of it, so
+`md.generator.add_block_quote()` and `md.generator.add_callout()` are the same
+operation and behave the same way. Both quote whatever is selected, or the
+line under the cursor when nothing is: >markdown
+
+    one       →  > one          →  > [!NOTE]
+    two          > two             > one
+    three        > three           > two
+                                   > three
+<
+On a blank line there is nothing to quote, so an empty quote is opened and you
+land inside it in insert mode.
+
+With nothing selected and the cursor already inside a quote, `add_callout()`
+gives that quote a header rather than quoting one of its lines a second time:
+>markdown
+
+    > already quoted     →  > [!NOTE]
+    > lines here            > already quoted
+                            > lines here
+<
+The types offered come from `callout_types`, GitHub Flavored Markdown's own by
+default.
+
+==============================================================================
+9. TABLE OF CONTENTS                                       *md-drafting-toc*
+
+`md.generator.generate_toc()` writes the contents between fixed markers:
+>markdown
+
+    <!-- TOC -->
+    - [Title](#title)
+      - [Setup](#setup)
+    <!-- /TOC -->
+<
+The markers are inserted at the cursor the first time and rewritten in place
+afterwards, so regenerating is safe to repeat and picks up headings added or
+removed since. Headings inside the markers are not counted as the document's
+own, so the contents never lists itself.
+
+Anchors follow GitHub's slugs: lowercased, spaces turned into hyphens,
+punctuation dropped, underscores kept.
+
+==============================================================================
+10. JUMP NAVIGATION                                       *md-drafting-jump*
+
+Move the cursor to the next or previous occurrence of a markdown construct:
+>lua
+
+    md.jump.next(md.jump.TARGETS.HEADING)
+    md.jump.previous(md.jump.TARGETS.NOT_DONE_TASK)
+<
+Both wrap around the buffer — the last match jumps to the first — and both are
+no-ops with a message when the buffer holds no match at all, rather than
+jumping to where the cursor already is.
+
+    LINK            inline links, images skipped
+    REFERENCE_LINK  reference-style links and the definitions they point at
+    HEADING         `#` through `######`, read from the syntax tree, so a `#`
+                    inside a fenced code block is not one
+    TASK            list items carrying a checkbox, whatever its state
+    NOT_DONE_TASK   list items whose checkbox is one of `task_states.not_done`
+    CODE_BLOCK      fenced code blocks
+    TABLE           tables
+    THEMATIC_BREAK  `---`, `***`, `___`
+    FOOTNOTE        footnote references and their definitions
+
+The values are lowercase strings (`"not_done_task"`), which is what
+`:MdJumpNext` completes on and what the actions picker lists.
+
+==============================================================================
+11. PRESENTATION MODE                             *md-drafting-presentation*
+
+Slides are split on thematic breaks (`---`, `***`, `___`). An optional
+frontmatter block supplies the header, which also carries a slide counter:
+>markdown
+
+    ---
+    header_left: My Talk
+    header_center: Introduction
+    ---
+
+    # First slide
+
+    Some content.
+
+    ---
+
+    # Second slide
+<
+Navigate with the `presentation.keymaps` keys, `n` / `p` / `q` by default.
+They are buffer-local to the slide buffer and go away with it.
+
+The slide is centered at `presentation.width` columns, and the space left over
+on either side becomes the margin.
+
+Long lines are wrapped at word boundaries to fit the slide. Slides are
+rendered into a scratch buffer, so the document itself is never modified, and
+the statusline and tabline are restored along with it when the presentation is
+closed.
+
+The heading takes |hl-StatusLine|'s colors by default, so it reads as a bar
+against the slide, with `presentation.header_gap` blank rows between the two.
+
+==============================================================================
+12. FOCUS MODE                                           *md-drafting-focus*
+
+A distraction-free writing view: the document centered on screen with the rest
+of the editor hidden behind it, the file name and a live word count in the
+heading.
+
+`md.focus.toggle()` opens it and closes it again; `:MdFocus` does the same,
+and so does `:q`. There is no plugin-owned mapping — in a writing view every
+letter key is a key you are typing with — so bind `md.focus.toggle` yourself.
+
+Unlike presentation mode, this is your document, opened in place. Edits go
+straight into the buffer, so `:w` works normally and nothing is copied.
+Closing the view carries the cursor back to the window you started from, so
+you resume where you stopped writing rather than where the session began.
+
+Focus mode turns typewriter scrolling on while it is open, and off again when
+it closes — but only if focus mode is what turned it on, so switching it on by
+hand first means leaving focus mode does not take it away. It is a feature in
+its own right (|md-drafting-typewriter|), so set `focus_mode.typewriter =
+false` if you would rather focus mode left scrolling alone.
+
+One more behavior comes out of the defaults in `focus_mode.win_opts`: markup
+is concealed, from `conceallevel = 2`, so prose reads as prose.
+|'concealcursor'| is deliberately left alone, so markup on the line the cursor
+is on stays visible while you edit it and conceals again when you move away.
+What actually conceals depends on your treesitter queries — the stock
+`markdown_inline` ones hide emphasis markers but leave link brackets alone.
+
+==============================================================================
+13. TYPEWRITER SCROLLING                            *md-drafting-typewriter*
+
+The line you are writing keeps a fixed height on screen, and the text moves
+under it. It works in any buffer and any window, with or without focus mode,
+and is switched on per buffer — so it can be on for the chapter you are
+drafting and off for the notes file in the next window. >lua
+
+    typewriter = {
+      position = 0.4,   -- a little above the middle; 0.5 is the default
+    },
+<
+                                             *md-drafting-typewriter-why*
+Why not just 'scrolloff'~
+
+|'scrolloff'| cannot do this on its own, which is the point of the feature. It
+asks for so many lines above and below the cursor and gives up when the
+document does not have them — so it holds in the middle of a file and lets go
+at exactly the two places writing happens: the end of a draft you are
+extending, and the first lines of a new one.
+
+Below the last line Vim already scrolls further than |'scrolloff'| will, so
+the bottom needs nothing. Above the first line there is nothing to scroll to,
+so blank rows are hung there as virtual lines. They are virtual, so the
+document never gains lines and `:w` writes only what you typed — but it does
+mean that with the cursor at the top of the file, the rows above it are blank.
+That is the effect working, not a rendering fault.
+
+While it is on, |'scrolloff'| and |'smoothscroll'| belong to it: both are set
+on the window and put back when you switch it off.
+
+==============================================================================
+14. WINDOW OPTIONS                                    *md-drafting-win-opts*
+
+The window a full-screen view opens in is configured through a `win_opts`
+table rather than through a setting per option. Your table is merged over the
+defaults, so naming one option replaces it and leaves the rest alone: >lua
+
+    presentation = {
+      win_opts = {
+        number = true,        -- line numbers on the slide
+        conceallevel = 2,     -- hide link brackets and emphasis markers
+      },
+    },
+<
+Anything window-local can go in there. Four things are handled elsewhere:
+
+    'number', 'relativenumber', 'signcolumn'
+        Turned off for every full-screen view before your table is applied, so
+        setting them here works — this is how you turn them back on.
+
+    'winhighlight'
+        Owned by the view, since it is what points the window at the highlight
+        groups in |md-drafting-colors|. Entries for `Normal`, `NormalNC`,
+        `WinBar` and `WinBarNC` are replaced; any others you set are kept.
+
+    'wrap', 'linebreak'
+        Defaulted on, because a centered column of prose wants them. Set
+        either to false to opt out.
+
+    'scrolloff', 'smoothscroll'
+        Taken over by typewriter scrolling while it is on, and put back when
+        it is switched off.
+
+==============================================================================
+15. COLORS                                              *md-drafting-colors*
+
+Colors are highlight groups rather than settings, so a colorscheme can theme
+the plugin and you can change them with the same |nvim_set_hl()| you use for
+everything else.
+
+There are two levels. The shared groups apply to every full-screen view:
+
+                                                     *hl-MdDraftingHeader*
+                                                     *hl-MdDraftingNormal*
+                                                   *hl-MdDraftingBackdrop*
+    MdDraftingHeader        links to StatusLine   The heading strip
+    MdDraftingNormal        links to Normal       The page, and the gap under
+                                                  the heading
+    MdDraftingBackdrop      links to Normal       The margin on either side
+
+Each mode then links its own groups to those, so it can be given colors of its
+own without disturbing the others:
+
+    MdDraftingPresentationHeader     links to MdDraftingHeader
+    MdDraftingPresentationNormal     links to MdDraftingNormal
+    MdDraftingPresentationBackdrop   links to MdDraftingBackdrop
+    MdDraftingFocusHeader            links to MdDraftingHeader
+    MdDraftingFocusNormal            links to MdDraftingNormal
+    MdDraftingFocusBackdrop          links to MdDraftingBackdrop
+
+Set a shared group to retint every view at once: >lua
+
+    vim.api.nvim_set_hl(0, "MdDraftingBackdrop", { bg = "#11111b" })
+<
+Set a mode's own group to change only that mode: >lua
+
+    vim.api.nvim_set_hl(0, "MdDraftingPresentationHeader", {
+      fg = "#cdd6f4",
+      bg = "#313244",
+      bold = true,
+    })
+<
+A group is a whole definition, not a patch: setting only `fg` leaves the
+background unset rather than keeping the one it was linking to. Name both if
+you want both.
+
+The plugin defines these with `default = true`, so it never overwrites a group
+you or your colorscheme already defined, and re-defines them after
+|ColorScheme| — which clears every group, including your own overrides. Put
+yours behind a |ColorScheme| autocommand if you switch colorschemes at
+runtime: >lua
+
+    vim.api.nvim_create_autocmd("ColorScheme", {
+      callback = function()
+        vim.api.nvim_set_hl(0, "MdDraftingBackdrop", { bg = "#11111b" })
+      end,
+    })
+<
+==============================================================================
+16. COMMANDS                                          *md-drafting-commands*
+
+With `add_commands = true`, each function also gets a buffer-local user
+command in markdown buffers.
+
+                                                                 *:MdActions*
+:MdActions [menu ...]       Open the actions menu, or the named menus given
+                                                             *:MdToggleBold*
+:MdToggleBold               Toggle bold
+                                                           *:MdToggleItalic*
+:MdToggleItalic             Toggle italic
+                                                    *:MdToggleStrikethrough*
+:MdToggleStrikethrough      Toggle strikethrough
+                                                       *:MdToggleInlineCode*
+:MdToggleInlineCode         Toggle inline code
+                                                             *:MdToggleTask*
+:MdToggleTask               Cycle the task list item state
+                                                            *:MdGenerateToc*
+:MdGenerateToc              Generate or regenerate the table of contents
+                                                              *:MdAddCallout*
+:MdAddCallout               Quote the current line or selection as a callout
+                                                                *:MdAddTable*
+:MdAddTable                 Insert a table skeleton
+                                                                 *:MdAddLink*
+:MdAddLink                  Insert a link
+                                                  *:MdAddReferenceStyleLink*
+:MdAddReferenceStyleLink    Insert a reference-style link
+                                                                *:MdAddImage*
+:MdAddImage                 Insert an image
+                                                             *:MdAddFootnote*
+:MdAddFootnote              Insert a footnote and its definition
+                                                            *:MdAddCodeBlock*
+:MdAddCodeBlock             Insert a fenced code block
+                                                           *:MdAddBlockQuote*
+:MdAddBlockQuote            Quote the current line or selection
+                                                               *:MdJumpNext*
+:MdJumpNext {target}        Move to the next occurrence of a construct
+                                                           *:MdJumpPrevious*
+:MdJumpPrevious {target}    Move to the previous occurrence of a construct
+                                                                 *:MdPresent*
+:MdPresent                  Start presentation mode
+                                                                   *:MdFocus*
+:MdFocus                    Toggle focus mode
+                                                              *:MdTypewriter*
+:MdTypewriter               Toggle typewriter scrolling
+
+==============================================================================
+17. API                                                    *md-drafting-api*
+
+    md.actions.open_all({opts})
+        Open a picker with every action.
+    md.actions.open_menu({names}, {opts})
+        Open a picker with one menu, or several.
+    md.actions.register({menu}, {action})
+        Add an entry to a menu. See |md-drafting-actions-register|.
+    md.actions.menu_names()
+        The registered menu names, sorted.
+
+    md.format.toggle_bold({opts})
+    md.format.toggle_italic({opts})
+    md.format.toggle_strikethrough({opts})
+    md.format.toggle_inline_code({opts})
+        Toggle a format on the selection, the word under the cursor, or
+        nothing. See |md-drafting-format|.
+    md.format.prepare({marker}, {opts})
+        Resolve the target now, returning a function that applies {marker}
+        later. See |md-drafting-actions-prepare|.
+
+    md.task.toggle()
+        Cycle the task list item state.
+
+    md.generator.generate_toc()
+        Generate or regenerate the table of contents.
+    md.generator.add_callout({opts})
+    md.generator.prepare_callout({opts})
+        Quote the current line or selection as a callout.
+    md.generator.add_block_quote({opts})
+    md.generator.prepare_block_quote({opts})
+        Quote the current line or selection.
+    md.generator.add_link({opts})
+    md.generator.prepare_link({opts})
+        Insert a link.
+    md.generator.add_reference_style_link({opts})
+    md.generator.prepare_reference_style_link({opts})
+        Insert a reference-style link, and its definition when the label is
+        new.
+    md.generator.add_table()
+        Insert a table skeleton.
+    md.generator.add_image()
+        Insert an image.
+    md.generator.add_footnote()
+        Insert a footnote and its definition.
+    md.generator.add_code_block()
+        Insert a fenced code block.
+
+    md.jump.next({target})
+        Move to the next occurrence of a construct, wrapping to the first.
+    md.jump.previous({target})
+        Move to the previous occurrence, wrapping to the last.
+    md.jump.target_names()
+        The target names, in the order the menu offers them.
+    md.jump.TARGETS
+        The targets, by name. See |md-drafting-jump|.
+
+    md.presentation.start_presentation()
+        Start presentation mode.
+    md.focus.toggle()
+        Toggle focus mode.
+
+    md.typewriter.toggle({bufnr})
+    md.typewriter.enable({bufnr})
+    md.typewriter.disable({bufnr})
+    md.typewriter.is_enabled({bufnr})
+        Typewriter scrolling for a buffer, the current one when {bufnr} is
+        omitted. See |md-drafting-typewriter|.
+
+Every `prepare_*` function returns the function to call later, and exists
+because |vim.ui.select()| is asynchronous. See |md-drafting-actions-prepare|.
+
+vim:tw=78:ts=8:ft=help:norl:

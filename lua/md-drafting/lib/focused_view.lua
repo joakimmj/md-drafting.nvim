@@ -20,8 +20,8 @@ local BASE_WIN_OPTS = {
 -- modified globals and restore the wrong values on the way out.
 local active = nil
 
--- Either window may already be gone: the view can be dismissed by closing its
--- window directly, and a wiped buffer takes its window with it.
+--- Close a window if it is still there.
+---@param win? integer Window id
 local function close_window(win)
   if win and vim.api.nvim_win_is_valid(win) then
     vim.api.nvim_win_close(win, true)
@@ -31,9 +31,9 @@ end
 -- Highlights
 local highlights = {}
 
--- Everything is set with `default = true`, so anything that already has an
--- opinion wins: a colorscheme that themes the plugin, or a user's own
--- nvim_set_hl. The plugin only fills in what nobody has spoken for.
+--- Define a highlight group and remember it across `:colorscheme`.
+---@param name string Highlight group name
+---@param value vim.api.keyset.highlight Group definition
 function M.define_highlight(name, value)
   highlights[name] = value
   vim.api.nvim_set_hl(0, name, vim.tbl_extend("force", value, { default = true }))
@@ -55,9 +55,11 @@ M.define_highlight("MdDraftingHeader", { link = "StatusLine" })
 M.define_highlight("MdDraftingNormal", { link = "Normal" })
 M.define_highlight("MdDraftingBackdrop", { link = "Normal" })
 
--- Centered geometry for the content float. A width below 1 is a fraction of
--- the terminal, anything else a column count; either way it is clamped to the
--- terminal, so a narrow terminal degrades to full width instead of overflowing.
+--- Centered geometry for the content float. A width below 1 is a fraction of the
+--- terminal, anything else a column count; either way it is clamped to the
+--- terminal, so a narrow one degrades to full width instead of overflowing.
+---@param width? number Width in columns, or a fraction of the terminal
+---@return vim.api.keyset.win_config config Window config
 local function geometry(width)
   local columns = vim.o.columns
 
@@ -76,8 +78,10 @@ local function geometry(width)
   }
 end
 
--- Where each window goes. With no gap asked for, the heading is the content
--- window's own winbar and there is nothing else to place.
+--- Where each window goes. With no gap asked for, the heading is the content
+--- window's own winbar and there is nothing else to place.
+---@param opts FocusedViewOpts View options
+---@return { content: table, heading: table? } places Window configs
 local function layout(opts)
   local base = geometry(opts.width)
   local gap = opts.header and (opts.header_gap or 0) or 0
@@ -100,9 +104,12 @@ local function layout(opts)
   }
 end
 
--- 'winhighlight' is a single option holding every remapping for a window, so
--- the caller's entries and the view's own have to be merged by key rather than
--- one overwriting the other.
+--- 'winhighlight' is a single option holding every remapping for a window, so the
+--- caller's entries and the view's own have to be merged by key rather than one
+--- overwriting the other.
+---@param existing? string The option's current value
+---@param owned string[][] Entries the view owns, as { from, to } pairs
+---@return string winhighlight The merged option
 local function winhighlight(existing, owned)
   local taken, entries = {}, {}
 
@@ -127,12 +134,13 @@ local function winhighlight(existing, owned)
   return table.concat(entries, ",")
 end
 
--- A heading laid out as left / center / right. A section is a string, or
--- { text = ..., hl = ... } to give it a highlight group of its own.
---
--- Winbar content is parsed as a statusline, so "%" in text that came from the
--- document has to be escaped or it is read as an item; "%=" between the
--- sections is what spreads them out.
+--- A heading laid out as left / center / right.
+---
+--- Winbar content is parsed as a statusline, so "%" in text that came from the
+--- document has to be escaped or it is read as an item; "%=" between the
+--- sections is what spreads them out.
+---@param sections { left?: string | { text: string, hl: string? }, center?: string | { text: string, hl: string? }, right?: string | { text: string, hl: string? } } Sections, each a string or a table giving it a highlight group of its own
+---@return string winbar Heading, as a statusline expression
 function M.header_line(sections)
   local rendered = {}
 
@@ -154,22 +162,35 @@ function M.header_line(sections)
   return " " .. table.concat(rendered, "%=") .. " "
 end
 
--- opts = {
---   buf,            -- required; the caller owns it, scratch or real
---   width,          -- see geometry()
---   header,         -- fn() -> string, rendered into the winbar
---   header_events,  -- events that re-render the header
---   header_hl,      -- highlight group for the heading strip
---   header_gap,     -- blank rows between the heading and the content
---   normal_hl,      -- highlight group for the content window itself
---   backdrop,       -- highlight group for the margins, or false for none
---   win_opts,       -- window-local overrides, applied over BASE_WIN_OPTS
---   on_close,
--- }
---
--- The colors are named as groups rather than set through win_opts.winhighlight
--- so that callers never have to build that string, and so the view keeps hold
--- of the keys its own styling depends on.
+---@class FocusedViewOpts
+---@field buf integer Buffer to show; the caller owns it, scratch or real
+---@field width? number Content width, see geometry()
+---@field header? fun(): string Heading, rendered into the winbar
+---@field header_events? string[] Events that re-render the heading
+---@field header_hl? string Highlight group for the heading strip
+---@field header_gap? integer Blank rows between the heading and the content
+---@field normal_hl? string Highlight group for the content window itself
+---@field backdrop? string|false Highlight group for the margins, false for none
+---@field win_opts? table<string, any> Window-local overrides, over BASE_WIN_OPTS
+---@field on_close? fun() Called once, as the view is torn down
+
+---@class FocusedViewHandle
+---@field win integer? Content window, nil once it has been closed
+---@field buf integer Buffer being shown
+---@field closed boolean Whether the view has been torn down
+---@field cursor fun(): integer[]? Cursor position in the view
+---@field refresh_header fun() Re-render the heading
+---@field close fun() Tear the view down and restore what it took
+
+--- Open a full-screen view: a centered content window, an optional heading
+--- above it, and a backdrop filling the margins. Only one can be open at a
+--- time, so opening a second closes the first.
+---
+--- The colors are named as groups rather than set through win_opts.winhighlight
+--- so that callers never have to build that string, and so the view keeps hold
+--- of the keys its own styling depends on.
+---@param opts FocusedViewOpts View options
+---@return FocusedViewHandle handle The open view
 function M.open(opts)
   if active then
     active.close()
@@ -265,7 +286,8 @@ function M.open(opts)
   local handle = { win = win, buf = opts.buf, closed = false }
 
   -- Where the cursor is in the view, for a caller showing a real buffer that
-  -- wants to carry the position back to wherever else the buffer is open.
+  -- wants to carry the position back to wherever else the buffer is open. Read
+  -- from the last known position once the window has gone.
   function handle.cursor()
     if handle.win and vim.api.nvim_win_is_valid(handle.win) then
       return vim.api.nvim_win_get_cursor(handle.win)

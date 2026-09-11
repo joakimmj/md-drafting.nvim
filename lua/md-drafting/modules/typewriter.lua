@@ -15,15 +15,19 @@ local active = {}
 -- CursorMoved and land us back in here.
 local centering = false
 
--- The screen row the cursor is held on. Row 1 is the top of the window.
+--- The screen row the cursor is held on. Row 1 is the top of the window.
+---@param height integer Window height in rows
+---@return integer row Screen row
 local function target_row(height)
   local position = config.options.typewriter.position
   return math.max(1, math.min(math.floor(height * position) + 1, height))
 end
 
--- Blank rows above the first line, enough to hold the cursor at `row` when the
--- document starts there. Nothing is written to the buffer: it is the user's own
--- document, which must not grow lines just because of how it is displayed.
+--- Blank rows above the first line, enough to hold the cursor at `row` when the
+--- document starts there. They are virtual: the user's own document must not
+--- grow lines just because of how it is displayed.
+---@param bufnr integer Buffer id
+---@param row integer Screen row the cursor is held on
 local function apply_filler(bufnr, row)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return
@@ -46,6 +50,7 @@ local function apply_filler(bufnr, row)
   })
 end
 
+--- Scroll the window so the cursor sits on its target row.
 local function center()
   if centering then
     return
@@ -87,10 +92,17 @@ local function center()
   centering = false
 end
 
+--- Whether typewriter scrolling is on for a buffer.
+---@param bufnr? integer Buffer id, current buffer when omitted
+---@return boolean enabled
 function M.is_enabled(bufnr)
   return active[bufnr or vim.api.nvim_get_current_buf()] ~= nil
 end
 
+--- Turn typewriter scrolling on. It takes over 'scrolloff' and 'smoothscroll'
+--- on the current window, and gives both back when it is switched off, so it
+--- follows the buffer but is set up against the window showing it now.
+---@param bufnr? integer Buffer id, current buffer when omitted
 function M.enable(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   if active[bufnr] then
@@ -139,6 +151,8 @@ function M.enable(bufnr)
   center()
 end
 
+--- Turn typewriter scrolling off and put the window options back.
+---@param bufnr? integer Buffer id, current buffer when omitted
 function M.disable(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   local state = active[bufnr]
@@ -159,6 +173,8 @@ function M.disable(bufnr)
   end
 end
 
+--- Turn typewriter scrolling on, or off when it already is.
+---@param bufnr? integer Buffer id, current buffer when omitted
 function M.toggle(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   if M.is_enabled(bufnr) then

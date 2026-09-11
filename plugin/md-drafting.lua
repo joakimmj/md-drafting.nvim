@@ -1,3 +1,5 @@
+-- Buffer-local user commands for markdown buffers, created only when
+-- `add_commands` is on.
 local config = require("md-drafting.config")
 local drafting = require("md-drafting")
 

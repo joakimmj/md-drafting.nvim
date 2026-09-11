@@ -1,8 +1,9 @@
+-- Default options, and the table `setup()` merges the user's over. See
+-- `:help md-drafting-config` for what each one does in full.
 local M = {}
 
 M.options = {
-  -- Add user commands for all functions in the plugin.
-  -- default: false
+  -- Add a user command for every function, in markdown buffers.
   add_commands = false,
 
   -- Checkbox markers, grouped by meaning. `task.toggle` cycles them in the
@@ -13,8 +14,7 @@ M.options = {
     done = { "[x]" },
   },
 
-  -- Callout types to use for `add_callout`.
-  -- These are the GitHub Flavored Markdown callout types.
+  -- Callout types offered by `add_callout`, GitHub Flavored Markdown's own.
   callout_types = {
     "NOTE",
     "TIP",
@@ -24,23 +24,15 @@ M.options = {
   },
 
   presentation = {
-    -- Width of the slide. A value of 1 or more is a number of columns, a
-    -- value between 0 and 1 is a fraction of the terminal width. Whatever is
-    -- left over becomes the margin on either side.
-    -- default: 80
+    -- Slide width: 1 or more is a column count, between 0 and 1 a fraction of
+    -- the terminal. The rest becomes the margin on either side.
     width = 80,
 
-    -- Blank rows between the heading and the slide. Set to 0 to sit the
-    -- heading directly on top of the content.
-    -- default: 1
+    -- Blank rows between the heading and the slide; 0 sits them together.
     header_gap = 1,
 
-    -- Window options for the slide, merged over these defaults: naming one
-    -- replaces it and leaves the rest alone. Line numbers, the sign column
-    -- and the colors are not among them -- the first two are off for every
-    -- full-screen view, and colors are highlight groups. See the README.
+    -- Window-local options for the slide, merged over these by key.
     win_opts = {
-      -- Fold long lines at word boundaries rather than mid-word.
       wrap = true,
       linebreak = true,
     },
@@ -54,36 +46,26 @@ M.options = {
   },
 
   focus_mode = {
-    -- Width of the page, read the same way as `presentation.width`.
-    -- default: 80
+    -- Page width, read the same way as `presentation.width`.
     width = 80,
 
     -- Blank rows between the heading and the page.
-    -- default: 1
     header_gap = 1,
 
-    -- What the heading counts, in the order shown.
+    -- What the heading counts, in the order shown: "words", "lines".
     stats = { "words", "lines" },
 
-    -- Turn typewriter scrolling on when focus mode opens, and off again when
-    -- it closes. Configured under `typewriter` below.
-    -- default: true
+    -- Turn typewriter scrolling on with focus mode, and off again after.
     typewriter = true,
 
-    -- Window options for the page, merged over these defaults: naming one
-    -- replaces it and leaves the rest alone. See the README.
-    --
-    -- 'scrolloff' and 'smoothscroll' are not among them: typewriter scrolling
-    -- takes both over while it is on, and puts them back afterwards.
+    -- Window-local options for the page, merged over these by key.
+    -- 'scrolloff' and 'smoothscroll' belong to typewriter scrolling instead.
     win_opts = {
-      -- Fold long lines at word boundaries rather than mid-word.
       wrap = true,
       linebreak = true,
 
-      -- Hide the markup the markdown parser marks as concealable, which with
-      -- the stock treesitter queries means emphasis markers. 'concealcursor'
-      -- is left alone, so markup on the cursor's own line stays visible while
-      -- it is being edited.
+      -- Conceal what the markdown parser marks concealable. 'concealcursor' is
+      -- left alone, so markup on the cursor's line stays visible.
       conceallevel = 2,
 
       cursorline = false,
@@ -91,12 +73,10 @@ M.options = {
     },
   },
 
-  -- Typewriter scrolling, which can be toggled in any buffer with
-  -- `typewriter.toggle()` and is not tied to focus mode.
+  -- Typewriter scrolling, which works in any buffer, focus mode or not.
   typewriter = {
-    -- Where the line being written sits, as a fraction of the window height.
-    -- 0.4 puts it a little above the middle, which some people prefer.
-    -- default: 0.5
+    -- Screen row the line being written is held at, as a fraction of the
+    -- window height. 0.4 sits a little above the middle.
     position = 0.5,
   },
 }

@@ -1,21 +1,33 @@
+-- Buffer, cursor and window helpers shared by the modules. Rows are 0-indexed
+-- where the API they wrap is, and named `lnum` where they are 1-indexed.
 local M = {}
 
--- Text of a single 0-indexed line, empty string when out of range.
+--- The text of a single line.
+---@param bufnr integer Buffer id, or 0 for the current buffer
+---@param row integer 0-indexed row
+---@return string line Line text, empty when the row is out of range
 function M.line(bufnr, row)
   return vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ""
 end
 
+--- Whether the editor is in insert mode.
+---@return boolean insert
 function M.in_insert_mode()
   return vim.api.nvim_get_mode().mode:sub(1, 1) == "i"
 end
 
--- The visual mode letter (v, V or CTRL-V) when one is active, else nil.
+--- The visual mode letter when one is active.
+---@return string? mode One of "v", "V" or CTRL-V, or nil outside visual mode
 local function visual_mode()
   return vim.api.nvim_get_mode().mode:sub(1, 1):match("[vV\22]")
 end
 
--- The region to act on, as 0-indexed { start_row, start_col, end_row, end_col }
--- with an exclusive end column, or nil when nothing is selected.
+--- The region to act on: the visual selection, or the range a user command was
+--- given. Called from a mapping, with no opts, the current mode decides.
+---@param bufnr integer Buffer id, or 0 for the current buffer
+---@param opts? table Options a user command was called with
+---@return integer[]? range 0-indexed { start_row, start_col, end_row, end_col },
+---the end column exclusive, or nil when nothing is selected
 function M.selection(bufnr, opts)
   local visual = visual_mode()
   local start_row, start_col, end_row, end_col
@@ -43,7 +55,11 @@ function M.selection(bufnr, opts)
   return { start_row, start_col, end_row, math.min(end_col, #M.line(bufnr, end_row)) }
 end
 
--- The selected text, joined with newlines, or nil when nothing is selected.
+--- The selected text, joined with newlines.
+---@param bufnr integer Buffer id, or 0 for the current buffer
+---@param opts? table Options a user command was called with
+---@return string? text Selected text, or nil when nothing is selected
+---@return integer[]? range The range it was read from, as M.selection returns it
 function M.selected_text(bufnr, opts)
   local range = M.selection(bufnr, opts)
   if not range then
@@ -52,6 +68,12 @@ function M.selected_text(bufnr, opts)
   return table.concat(vim.api.nvim_buf_get_text(bufnr, range[1], range[2], range[3], range[4], {}), "\n"), range
 end
 
+--- Where the word under the cursor ends. On whitespace the word before the
+--- cursor is taken, or the one after it when the line starts with the gap.
+---@param bufnr integer Buffer id, or 0 for the current buffer
+---@param lnum integer 1-indexed row
+---@param col integer 0-indexed column
+---@return integer col 0-indexed column just past the word
 function M.word_end(bufnr, lnum, col)
   local line = M.line(bufnr, lnum - 1)
   local pos = math.max(math.min(col + 1, #line), 1) -- 1-indexed character under the cursor
@@ -78,8 +100,12 @@ function M.word_end(bufnr, lnum, col)
   return pos - 1
 end
 
--- Put the cursor at a column and start typing there. Past the end of the line
--- there is no character to insert before, so append instead.
+--- Put the cursor at a column and start typing there. Past the end of the line
+--- there is no character to insert before, so append instead.
+---@param bufnr integer Buffer id, or 0 for the current buffer
+---@param win integer Window id, or 0 for the current window
+---@param lnum integer 1-indexed row
+---@param col integer 0-indexed column
 function M.start_insert(bufnr, win, lnum, col)
   local line = M.line(bufnr, lnum - 1)
   if col >= #line then
@@ -92,9 +118,9 @@ function M.start_insert(bufnr, win, lnum, col)
 end
 
 --- Ask for a value from the user.
----@param message string The prompt message to display to the user.
----@param default? string Optional default text to pre-fill the prompt.
----@return string|nil value The entered string, an empty string if left blank, or nil if cancelled.
+---@param message string Prompt to display
+---@param default? string Text to pre-fill the prompt with
+---@return string? value The entered string, empty when left blank, nil when cancelled
 function M.prompt(message, default)
   local ok, value = pcall(vim.fn.input, message, default or "")
   if not ok then
@@ -103,7 +129,9 @@ function M.prompt(message, default)
   return value
 end
 
--- Root of the buffer's markdown syntax tree.
+--- Root of the buffer's markdown syntax tree.
+---@param bufnr integer Buffer id, or 0 for the current buffer
+---@return TSNode? root Tree root, or nil once the caller has been told why not
 function M.ts_root(bufnr)
   local parser, err = vim.treesitter.get_parser(bufnr, "markdown")
   if not parser then

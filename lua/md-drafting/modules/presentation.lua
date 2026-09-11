@@ -1,3 +1,5 @@
+-- Presentation mode: the document split into slides on thematic breaks and
+-- rendered one at a time into a scratch buffer.
 local M = {}
 
 local config = require("md-drafting.config")
@@ -18,6 +20,7 @@ focused_view.define_highlight("MdDraftingPresentationHeader", { link = "MdDrafti
 focused_view.define_highlight("MdDraftingPresentationNormal", { link = "MdDraftingNormal" })
 focused_view.define_highlight("MdDraftingPresentationBackdrop", { link = "MdDraftingBackdrop" })
 
+--- Render the current slide and re-draw the heading.
 local function show_slide()
   if not state.view or state.view.closed then
     return
@@ -30,6 +33,8 @@ local function show_slide()
   state.view.refresh_header()
 end
 
+--- Move by a number of slides, stopping at either end of the deck.
+---@param delta integer Slides to move, negative to go back
 local function navigate(delta)
   local new_slide = state.current_slide + delta
   if new_slide >= 1 and new_slide <= #state.slides then
@@ -38,6 +43,7 @@ local function navigate(delta)
   end
 end
 
+--- Split the current buffer into slides and open the first one.
 function M.start_presentation()
   local bufnr = vim.api.nvim_get_current_buf()
 
