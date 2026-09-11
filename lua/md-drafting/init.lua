@@ -1,7 +1,6 @@
 local M = {}
 
 local config = require("md-drafting.config")
-local syntax = require("md-drafting.syntax")
 
 --- The user's options over the defaults.
 ---@param defaults table Default options
@@ -52,12 +51,17 @@ M.generator = require("md-drafting.modules.generator")
 M.jump = require("md-drafting.modules.jump")
 M.actions = require("md-drafting.lib.actions")
 
+M.api = {
+  syntax = require("md-drafting.syntax"),
+  section = require("md-drafting.lib.section"),
+}
+
 -- Action menus
 for _, format in ipairs({
-  { label = "Bold", pattern = syntax.EMPHASIS.bold },
-  { label = "Italic", pattern = syntax.EMPHASIS.italic },
-  { label = "Strikethrough", pattern = syntax.EMPHASIS.strikethrough },
-  { label = "Inline code", pattern = syntax.EMPHASIS.code },
+  { label = "Bold", pattern = M.api.syntax.EMPHASIS.bold },
+  { label = "Italic", pattern = M.api.syntax.EMPHASIS.italic },
+  { label = "Strikethrough", pattern = M.api.syntax.EMPHASIS.strikethrough },
+  { label = "Inline code", pattern = M.api.syntax.EMPHASIS.code },
 }) do
   M.actions.register("formatting", {
     label = format.label,

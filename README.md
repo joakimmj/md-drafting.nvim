@@ -459,3 +459,8 @@ vim.api.nvim_set_hl(0, "MdDraftingBackdrop", { bg = "#11111b" })
 
 All are defined with `default = true`, so your own definitions win.
 See `:help md-drafting-colors`.
+
+## 🧩 For plugin authors
+
+[Documentation for exposed API](PLUGIN_AUTHORS.md)
+

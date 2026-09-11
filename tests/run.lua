@@ -355,6 +355,13 @@ check(
 -- come back escaped rather than read as an item.
 check("header_line, percent escaped", header_line({ left = "100% done" }), " 100%% done%=%= ")
 
+-- api: the dependent-plugin surface is the same code the plugin runs on
+
+local api = require("md-drafting").api
+
+check("api.syntax is the syntax module", api.syntax == syntax, true)
+check("api.section is the section module", api.section == section, true)
+
 if failures > 0 then
   io.stderr:write(("\n%d of %d checks failed\n"):format(failures, checks))
   os.exit(1)
