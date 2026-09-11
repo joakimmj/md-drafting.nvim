@@ -80,7 +80,7 @@ function M.start_presentation()
   end
 
   if #state.slides == 0 then
-    vim.notify("No slides found. Separate slides with '---'.", vim.log.levels.ERROR)
+    vim.notify("md-drafting: no slides found, separate them with '---'", vim.log.levels.ERROR)
     return
   end
 

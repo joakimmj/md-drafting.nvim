@@ -52,8 +52,8 @@ function M.selected_text(bufnr, opts)
   return table.concat(vim.api.nvim_buf_get_text(bufnr, range[1], range[2], range[3], range[4], {}), "\n"), range
 end
 
-function M.word_end(bufnr, row, col)
-  local line = M.line(bufnr, row - 1)
+function M.word_end(bufnr, lnum, col)
+  local line = M.line(bufnr, lnum - 1)
   local pos = math.max(math.min(col + 1, #line), 1) -- 1-indexed character under the cursor
 
   if pos <= #line and line:sub(pos, pos):match("%s") then
@@ -80,13 +80,13 @@ end
 
 -- Put the cursor at a column and start typing there. Past the end of the line
 -- there is no character to insert before, so append instead.
-function M.start_insert(bufnr, win, row, col)
-  local line = M.line(bufnr, row - 1)
+function M.start_insert(bufnr, win, lnum, col)
+  local line = M.line(bufnr, lnum - 1)
   if col >= #line then
-    vim.api.nvim_win_set_cursor(win, { row, math.max(#line - 1, 0) })
+    vim.api.nvim_win_set_cursor(win, { lnum, math.max(#line - 1, 0) })
     vim.cmd("startinsert!")
   else
-    vim.api.nvim_win_set_cursor(win, { row, col })
+    vim.api.nvim_win_set_cursor(win, { lnum, col })
     vim.cmd("startinsert")
   end
 end

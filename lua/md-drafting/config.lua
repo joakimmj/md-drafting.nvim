@@ -5,9 +5,13 @@ M.options = {
   -- default: false
   add_commands = false,
 
-  -- Markers cycled through by `task.toggle`, in order. A plain list item is
-  -- not one of them: cycling past the last marker removes it again.
-  task_states = { "[ ]", "[x]" },
+  -- Checkbox markers, grouped by meaning. `task.toggle` cycles them in the
+  -- order given, not_done before done; past the last one a list item goes back
+  -- to plain, which is not one of the states.
+  task_states = {
+    not_done = { "[ ]" },
+    done = { "[x]" },
+  },
 
   -- Callout types to use for `add_callout`.
   -- These are the GitHub Flavored Markdown callout types.

@@ -1,6 +1,7 @@
 -- Moving the cursor to the next or previous occurrence of a markdown construct
 local M = {}
 
+local config = require("md-drafting.config")
 local syntax = require("md-drafting.syntax")
 local util = require("md-drafting.lib.util")
 
@@ -11,7 +12,7 @@ M.TARGETS = {
   REFERENCE_LINK = "reference_link",
   HEADING = "heading",
   TASK = "task",
-  OPEN_TASK = "open_task",
+  NOT_DONE_TASK = "not_done_task",
   CODE_BLOCK = "code_block",
   TABLE = "table",
   THEMATIC_BREAK = "thematic_break",
@@ -127,11 +128,13 @@ local TARGETS = {
     end,
   },
   {
-    name = M.TARGETS.OPEN_TASK,
+    name = M.TARGETS.NOT_DONE_TASK,
+    -- Which markers count as not done is `task_states`, so a configured cycle
+    -- is jumped by the same markers it is toggled through.
     find = function(bufnr)
       return scan_lines(bufnr, function(line)
-        local prefix = syntax.parse_list_item(line)
-        if prefix and syntax.parse_checkbox(line) == "open" then
+        local prefix, marker = syntax.parse_list_item(line)
+        if prefix and syntax.marker_state(marker, config.options.task_states) == "not_done" then
           return { #prefix }
         end
         return {}

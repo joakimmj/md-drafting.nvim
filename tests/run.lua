@@ -142,13 +142,31 @@ end
 
 check("parse_checkbox, not a list item", syntax.parse_checkbox("plain prose"), nil)
 check("parse_checkbox, a plain list item", syntax.parse_checkbox("- write it up"), nil)
-check("parse_checkbox, open", syntax.parse_checkbox("- [ ] write it up"), "open")
+check("parse_checkbox, not done", syntax.parse_checkbox("- [ ] write it up"), "not_done")
 check("parse_checkbox, done", syntax.parse_checkbox("- [x] written"), "done")
 check("parse_checkbox, done uppercase", syntax.parse_checkbox("- [X] written"), "done")
 check("parse_checkbox, an unknown marker", syntax.parse_checkbox("- [~] halfway"), nil)
 check("parse_checkbox, a link is not a marker", syntax.parse_checkbox("- [Note](note.md) matters"), nil)
-check("parse_checkbox, replaced markers", syntax.parse_checkbox("- [~] halfway", { open = { "[~]" } }), "open")
-check("parse_checkbox, replaced markers drop the default", syntax.parse_checkbox("- [ ] task", { open = { "[~]" } }), nil)
+
+local CONFIGURED = { not_done = { "[ ]", "[/]" }, done = { "[x]" } }
+
+check("parse_checkbox, configured markers", syntax.parse_checkbox("- [/] halfway", CONFIGURED), "not_done")
+check(
+  "parse_checkbox, configured markers drop the defaults",
+  syntax.parse_checkbox("- [X] written", CONFIGURED),
+  nil
+)
+
+check("marker_state, not a marker", syntax.marker_state(nil), nil)
+check("marker_state, not done", syntax.marker_state("[ ]"), "not_done")
+check("marker_state, done", syntax.marker_state("[x]"), "done")
+check("marker_state, unknown", syntax.marker_state("[~]"), nil)
+check("marker_state, configured", syntax.marker_state("[/]", CONFIGURED), "not_done")
+
+check("marker_cycle, defaults", syntax.marker_cycle(), { "[ ]", "[x]", "[X]" })
+check("marker_cycle, not done before done", syntax.marker_cycle(CONFIGURED), { "[ ]", "[/]", "[x]" })
+check("marker_cycle, one state only", syntax.marker_cycle({ done = { "[x]" } }), { "[x]" })
+check("marker_cycle, no markers", syntax.marker_cycle({}), {})
 
 -- syntax: headings and anchors
 

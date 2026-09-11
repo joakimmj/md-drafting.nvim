@@ -45,32 +45,57 @@ function M.parse_list_item(line)
   return prefix, marker, (after:gsub("^%s+", "", 1))
 end
 
---- Default markers (GitHub-flavored)
----@type { open: string[], done: string[] }
+--- The states a checkbox marker can be in, in cycling order.
+---@type string[]
+M.TASK_STATES = { "not_done", "done" }
+
+--- Markers a caller that configures none is read against (GitHub Flavored).
+---@type { not_done: string[], done: string[] }
 local DEFAULT_MARKERS = {
-  open = { "[ ]" },
+  not_done = { "[ ]" },
   done = { "[x]", "[X]" },
 }
 
---- Which state a list item's checkbox is in, or nil when it carries none.
----@param line string Line to read
----@param markers? { open: string[], done: string[] } Markers per state
----@return "open"|"done"|nil state Checkbox state, or nil when there is no checkbox
-function M.parse_checkbox(line, markers)
-  local _, marker = M.parse_list_item(line)
+--- Which state a bracketed marker belongs to, or nil when it is none of them.
+---@param marker string? Bracketed marker, as parse_list_item returns it
+---@param markers? { not_done: string[], done: string[] } Markers per state
+---@return "not_done"|"done"|nil state Marker state, or nil when unrecognized
+function M.marker_state(marker, markers)
   if not marker then
     return nil
   end
 
   markers = markers or DEFAULT_MARKERS
 
-  for _, state in ipairs({ "open", "done" }) do
+  for _, state in ipairs(M.TASK_STATES) do
     for _, candidate in ipairs(markers[state] or {}) do
       if candidate == marker then
         return state
       end
     end
   end
+end
+
+--- Which state a list item's checkbox is in, or nil when it carries none.
+---@param line string Line to read
+---@param markers? { not_done: string[], done: string[] } Markers per state
+---@return "not_done"|"done"|nil state Checkbox state, or nil when there is none
+function M.parse_checkbox(line, markers)
+  local _, marker = M.parse_list_item(line)
+  return M.marker_state(marker, markers)
+end
+
+--- Every marker, in cycling order: not_done first, then done.
+---@param markers? { not_done: string[], done: string[] } Markers per state
+---@return string[] cycle Markers in the order a toggle moves through them
+function M.marker_cycle(markers)
+  markers = markers or DEFAULT_MARKERS
+
+  local cycle = {}
+  for _, state in ipairs(M.TASK_STATES) do
+    vim.list_extend(cycle, markers[state] or {})
+  end
+  return cycle
 end
 
 --- Put one back together, the exact inverse of parse_list_item.

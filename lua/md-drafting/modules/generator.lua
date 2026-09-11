@@ -89,7 +89,7 @@ end
 function M.add_table()
   local cols = tonumber(util.prompt("Enter number of columns: "))
   if not cols or cols <= 0 then
-    vim.notify("Invalid input. Please enter a positive number for columns.", vim.log.levels.ERROR)
+    vim.notify("md-drafting: enter a positive number of columns", vim.log.levels.ERROR)
     return
   end
 
@@ -143,7 +143,7 @@ end
 local function link_text(target)
   if target.text then
     if target.text:find("\n") then
-      vim.notify("Select the link text on a single line.", vim.log.levels.ERROR)
+      vim.notify("md-drafting: select the link text on a single line", vim.log.levels.ERROR)
       return nil
     end
     return target.text
@@ -197,7 +197,7 @@ function M.add_image()
   local url = util.prompt("Enter image source: ")
 
   if not url or url == "" then
-    vim.notify("Invalid input. Please enter an image URL.", vim.log.levels.ERROR)
+    vim.notify("md-drafting: enter an image source", vim.log.levels.ERROR)
     return
   end
 
@@ -227,7 +227,7 @@ function M.add_footnote()
   local text = util.prompt("Enter footnote text: ")
 
   if not text or text == "" then
-    vim.notify("Invalid input. Please enter footnote text.", vim.log.levels.ERROR)
+    vim.notify("md-drafting: enter the footnote text", vim.log.levels.ERROR)
     return
   end
 
@@ -287,19 +287,15 @@ function M.add_block_quote(opts)
 end
 
 local function reference_exists(bufnr, ref_name)
-  local query = vim.treesitter.query.parse("markdown", "(link_reference_definition) @def")
-  if not query then
-    return false
-  end
-
   local root = util.ts_root(bufnr)
   if not root then
     return false
   end
 
+  local query = vim.treesitter.query.parse("markdown", "(link_reference_definition) @def")
   local label = syntax.format_link_label(ref_name)
 
-  for _, node, _ in query:iter_captures(root, bufnr) do
+  for _, node in query:iter_captures(root, bufnr, 0, -1) do
     for child in node:iter_children() do
       if child:type() == "link_label" and vim.treesitter.get_node_text(child, bufnr) == label then
         return true
@@ -367,7 +363,7 @@ function M.prepare_callout(opts)
 
       local start_row = enclosing_block_quote_row(bufnr)
       if start_row then
-        -- Already inside a qoute block
+        -- Already inside a block quote: give it a header instead.
         vim.api.nvim_buf_set_lines(bufnr, start_row, start_row, false, { syntax.format_callout(choice) })
         return
       end

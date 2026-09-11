@@ -7,6 +7,9 @@ local typewriter = require("md-drafting.modules.typewriter")
 local state = {
   view = nil,
   origin_win = nil,
+  -- Whether focus mode is the one that switched typewriter scrolling on, and
+  -- so the one that should switch it off again.
+  owns_typewriter = false,
 }
 
 -- Focus mode's highlight groups.

@@ -3,8 +3,27 @@ local M = {}
 local config = require("md-drafting.config")
 local syntax = require("md-drafting.syntax")
 
+--- The user's options over the defaults.
+---@param defaults table Default options
+---@param opts table Options given to setup()
+---@return table merged Options to run with
+local function merge(defaults, opts)
+  local merged = vim.deepcopy(defaults)
+
+  for key, value in pairs(opts) do
+    local default = merged[key]
+    if type(value) == "table" and type(default) == "table" and not vim.islist(default) then
+      merged[key] = merge(default, value)
+    else
+      merged[key] = vim.deepcopy(value)
+    end
+  end
+
+  return merged
+end
+
 function M.setup(opts)
-  config.options = vim.tbl_deep_extend("force", config.options, opts or {})
+  config.options = merge(config.options, opts or {})
 
   -- Validate config
   for _, mode in ipairs({ "presentation", "focus_mode" }) do
