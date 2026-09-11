@@ -20,7 +20,7 @@ CONTENTS                                            *md-drafting-contents*
    12. Focus mode ......................... |md-drafting-focus|
    13. Typewriter scrolling ............... |md-drafting-typewriter|
    14. Window options ..................... |md-drafting-win-opts|
-   15. Colors ............................ |md-drafting-colors|
+   15. Colors ............................. |md-drafting-colors|
    16. Commands ........................... |md-drafting-commands|
    17. API ................................ |md-drafting-api|
 
@@ -38,9 +38,10 @@ owns its own buffer. See |md-drafting-mappings|.
 ==============================================================================
 2. REQUIREMENTS                                 *md-drafting-requirements*
 
-nvim-treesitter with the `markdown` and `markdown_inline` parsers installed.
-The syntax tree is what tells a heading from a "#" inside a fenced code block,
-and a reference definition from a line that looks like one.
+Neovim 0.9 or later, and nvim-treesitter with the `markdown` and
+`markdown_inline` parsers installed. The syntax tree is what tells a heading
+from a "#" inside a fenced code block, and a reference definition from a line
+that looks like one.
 
 ==============================================================================
 3. CONFIGURATION                                        *md-drafting-config*

@@ -58,7 +58,8 @@ Full reference: `:help md-drafting`.
 </details>
 
 > [!IMPORTANT]
-> Requires `nvim-treesitter` with the `markdown` and `markdown_inline` parsers.
+> Requires Neovim 0.9 or later, and `nvim-treesitter` with the `markdown` and
+> `markdown_inline` parsers.
 
 ## ⚙️ Configuration
 

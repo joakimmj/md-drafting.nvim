@@ -133,7 +133,13 @@ end
 ---@param bufnr integer Buffer id, or 0 for the current buffer
 ---@return TSNode? root Tree root, or nil once the caller has been told why not
 function M.ts_root(bufnr)
-  local parser, err = vim.treesitter.get_parser(bufnr, "markdown")
+  -- Before Neovim 0.12 a missing parser raises; from 0.12 on it comes back as
+  -- `nil, err`. Fold the two into the second shape.
+  local ok, parser, err = pcall(vim.treesitter.get_parser, bufnr, "markdown")
+  if not ok then
+    parser, err = nil, parser
+  end
+
   if not parser then
     vim.notify(("md-drafting: no markdown treesitter parser: %s"):format(err or "unknown reason"), vim.log.levels.ERROR)
     return nil
