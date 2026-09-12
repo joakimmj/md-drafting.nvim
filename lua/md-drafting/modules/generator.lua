@@ -3,6 +3,8 @@
 local M = {}
 
 local config = require("md-drafting.config")
+local file_browser = require("md-drafting.lib.file_browser")
+local link_providers = require("md-drafting.lib.link_providers")
 local section = require("md-drafting.lib.section")
 local syntax = require("md-drafting.syntax")
 local util = require("md-drafting.lib.util")
@@ -153,24 +155,23 @@ local function link_target(bufnr, opts)
   }
 end
 
---- The link text: the selection, or one asked for.
+--- The label a selection supplied, if it supplied one, and whether it can be
+--- used at all. Asking for a label when there is none is the provider's job,
+--- since a provider may know one without asking.
 ---@param target table Target from link_target
----@return string? text Link text, or nil when there is none to use
-local function link_text(target)
-  if target.text then
-    if target.text:find("\n") then
-      vim.notify("md-drafting: select the link text on a single line", vim.log.levels.ERROR)
-      return nil
-    end
-    return target.text
+---@return string? text Label from the selection, or nil when nothing was selected
+---@return boolean ok False when the selection cannot be a label
+local function selection_label(target)
+  if not target.text then
+    return nil, true
   end
 
-  local text = util.prompt("Enter link text: ")
-  if not text or text == "" then
-    return nil
+  if target.text:find("\n") then
+    vim.notify("md-drafting: select the link text on a single line", vim.log.levels.ERROR)
+    return nil, false
   end
 
-  return text
+  return target.text, true
 end
 
 --- Write a link over its target and leave the cursor after it.
@@ -186,52 +187,149 @@ local function insert_link(bufnr, target, link)
   vim.api.nvim_win_set_cursor(0, { target.start_line + 1, target.start_col + #link })
 end
 
---- Resolve the target now and return a function that prompts for the link and
---- inserts it later.
----@param opts? table Options a user command was called with
----@return fun() insert Prompts for text and URL, then writes the link
+--- Resolve the target now and return a function that asks a provider for the
+--- link and inserts it later. Both the provider picker and the actions menu are
+--- asynchronous, so the selection has to be read before either of them opens.
+---@param opts? table Options a user command was called with; `provider` names the one to use
+---@return fun() insert Picks a provider, then writes what it answers with
 function M.prepare_link(opts)
   local bufnr = vim.api.nvim_get_current_buf()
   local target = link_target(bufnr, opts)
 
   return function()
-    local text = link_text(target)
-    if not text then
+    local text, ok = selection_label(target)
+    if not ok then
       return
     end
 
-    local url = util.prompt("Enter URL: ")
-    if not url or url == "" then
-      return
-    end
-
-    insert_link(bufnr, target, syntax.format_link(text, url))
+    link_providers.pick("link", function(provider)
+      provider.resolve({ kind = "link", text = text }, function(link)
+        -- A provider answering with nothing has aborted, and one leaving either
+        -- half out has nothing worth writing.
+        if link and link.text and link.text ~= "" and link.path and link.path ~= "" then
+          insert_link(bufnr, target, syntax.format_link(link.text, link.path))
+        end
+      end)
+    end, opts)
   end
 end
 
 --- Insert an inline link over the selection, or after the word under the cursor.
----@param opts? table Options a user command was called with
+---@param opts? table Options a user command was called with; `provider` names the one to use
 function M.add_link(opts)
   M.prepare_link(opts)()
 end
 
---- Insert an image on a line of its own, above the cursor.
-function M.add_image()
-  local alt_text = util.prompt("Enter image alt text: ")
-  if not alt_text then
-    return
+--- The text a link or an image is written with: the one the caller supplied, or
+--- one asked for. A provider that knows neither shares this rather than each of
+--- them asking. The target is already resolved, so the prompt can name it --
+--- alt text is written about a picture the writer may not have in mind yet.
+---
+--- An image may be left without alt text, a link may not: `![](x.png)` is a
+--- picture whose description is missing, while `[](x.md)` is nothing to click.
+--- Abandoning the prompt is not the same answer as leaving it blank.
+---@param ctx table Context the provider was called with
+---@param target string Target the link or image will point at
+---@return string? text Text to write, or nil when none was given
+---@return boolean ok False when the caller abandoned the prompt
+local function provided_label(ctx, target)
+  if ctx.text and ctx.text ~= "" then
+    return ctx.text, true
   end
-  local url = util.prompt("Enter image source: ")
 
-  if not url or url == "" then
-    vim.notify("md-drafting: enter an image source", vim.log.levels.ERROR)
-    return
+  local message = ctx.kind == "image" and "Enter image alt text" or "Enter link text"
+  local text = util.prompt(("%s (%s): "):format(message, target))
+
+  if not text then
+    return nil, false
+  end
+  if text == "" and ctx.kind ~= "image" then
+    return nil, false
   end
 
-  local image = syntax.format_image(alt_text, url)
-  local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+  return text, true
+end
 
-  vim.api.nvim_buf_set_lines(vim.api.nvim_get_current_buf(), cursor_line - 1, cursor_line - 1, false, { image })
+--- Whether a file is one `add_image` should offer.
+---@param name string File name
+---@return boolean image
+local function is_image(name)
+  local extension = name:match("%.([^.]+)$")
+  if not extension then
+    return false
+  end
+
+  return vim.tbl_contains(config.options.link_providers.file_or_url.image_extensions, extension:lower())
+end
+
+-- Built in, and the only provider until something registers another: the files
+-- around the document, with anywhere else typed in. It names no `kinds` -- a
+-- file and a URL are each as good an image source as a link target.
+--
+-- Every list opens where the document is, the same place every time, and the
+-- browser answers with an absolute path, which is written relative to the
+-- document, so the link keeps working wherever the folder is opened from.
+-- Nothing is created on disk: a picker that makes folders as a side effect of
+-- being opened is not what someone asked for by inserting a link.
+link_providers.register({
+  label = "File or URL",
+  resolve = function(ctx, done)
+    local bufnr = vim.api.nvim_get_current_buf()
+    local doc_dir = util.document_dir(bufnr)
+
+    file_browser.browse({
+      dir = doc_dir,
+      typed_prompt = ctx.kind == "image" and "Enter image source" or "Enter URL",
+      filter = ctx.kind == "image" and is_image or nil,
+      -- A folder is a target a link can have; an image has no use for one.
+      insert_dirs = ctx.kind == "link",
+    }, function(answer)
+      if not answer then
+        return done(nil)
+      end
+
+      local path
+      if answer.path then
+        path = util.relative_path(doc_dir, answer.path)
+      else
+        -- Typed rather than picked: a URL, or a path to something that is not
+        -- there yet. Either way it is written as it was given.
+        path = answer.text
+      end
+
+      -- The text is asked for after the target, so abandoning the browser costs
+      -- no prompt for a link it then cannot write.
+      local text, ok = provided_label(ctx, path)
+      if not ok then
+        return done(nil)
+      end
+
+      done({ text = text, path = path })
+    end)
+  end,
+})
+
+--- Insert an image on a line of its own, above the cursor. The source is asked
+--- for the way a link's target is, alt text after it, so inserting either reads
+--- the same way round.
+---@param opts? table Options a user command was called with; `provider` names the one to use
+function M.add_image(opts)
+  local bufnr = vim.api.nvim_get_current_buf()
+
+  link_providers.pick("image", function(provider)
+    provider.resolve({ kind = "image" }, function(image)
+      -- The alt text has no default on purpose: one derived from the filename
+      -- describes the file rather than the picture, which is worse than none
+      -- for the reader it exists for. Blank is an answer of its own.
+      if not image or not image.path or image.path == "" then
+        return
+      end
+
+      local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+      local line = syntax.format_image(image.text or "", image.path)
+      vim.api.nvim_buf_set_lines(bufnr, cursor_line - 1, cursor_line - 1, false, { line })
+    end)
+  end, opts)
 end
 
 -- `[ref]: url`.
@@ -347,46 +445,53 @@ local function reference_exists(bufnr, ref_name)
   return false
 end
 
---- Resolve the target now and return a function that prompts for the reference
---- and inserts it later, appending a definition when the label is new.
----@param opts? table Options a user command was called with
----@return fun() insert Prompts for text, reference name and URL
+--- Resolve the target now and return a function that asks a provider for the
+--- link and inserts it later, appending a definition when the label is new.
+---@param opts? table Options a user command was called with; `provider` names the one to use
+---@return fun() insert Picks a provider, then prompts for the reference name
 function M.prepare_reference_style_link(opts)
   local bufnr = vim.api.nvim_get_current_buf()
   local target = link_target(bufnr, opts)
 
   return function()
-    local text = link_text(target)
-    if not text then
+    local text, ok = selection_label(target)
+    if not ok then
       return
     end
 
-    local ref_name = util.prompt("Enter reference name (default: link text): ", text)
-    if not ref_name then
-      return
-    end
-    if ref_name == "" then
-      ref_name = text
-    end
+    link_providers.pick("link", function(provider)
+      provider.resolve({ kind = "link", text = text }, function(link)
+        -- A provider answering with nothing has aborted, and one leaving either
+        -- half out has nothing worth writing.
+        if not (link and link.text and link.text ~= "" and link.path and link.path ~= "") then
+          return
+        end
 
-    local url
-    if not reference_exists(bufnr, ref_name) then
-      url = util.prompt("Enter URL: ")
-      if not url or url == "" then
-        return
-      end
-    end
+        local ref_name = util.prompt("Enter reference name (default: link text): ", link.text)
+        if not ref_name then
+          return
+        end
+        if ref_name == "" then
+          ref_name = link.text
+        end
 
-    insert_link(bufnr, target, syntax.format_reference_link(text, ref_name))
+        -- Asked before the link is written, though a reference link is not
+        -- itself a definition: a name the buffer already defines keeps the
+        -- definition it has, and the provider's path is dropped.
+        local new_ref = not reference_exists(bufnr, ref_name)
 
-    if url then
-      append_definition(bufnr, syntax.format_reference_definition(ref_name, url))
-    end
+        insert_link(bufnr, target, syntax.format_reference_link(link.text, ref_name))
+
+        if new_ref then
+          append_definition(bufnr, syntax.format_reference_definition(ref_name, link.path))
+        end
+      end)
+    end, opts)
   end
 end
 
 --- Insert a reference-style link, and its definition when the label is new.
----@param opts? table Options a user command was called with
+---@param opts? table Options a user command was called with; `provider` names the one to use
 function M.add_reference_style_link(opts)
   M.prepare_reference_style_link(opts)()
 end

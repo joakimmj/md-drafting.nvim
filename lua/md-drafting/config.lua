@@ -23,6 +23,20 @@ M.options = {
     "CAUTION",
   },
 
+  -- Where a link or an image can point. See `:help md-drafting-link-providers`.
+  link_providers = {
+    -- Order the picker offers providers in, by label. A provider named here
+    -- comes first; the rest follow in registration order.
+    order = {},
+
+    -- The built-in provider, which browses the files around the document.
+    file_or_url = {
+      -- Extensions `add_image` lists. Anything else is still reachable by
+      -- typing the path, and links list every file whatever its extension.
+      image_extensions = { "png", "jpg", "jpeg", "gif", "webp", "svg" },
+    },
+  },
+
   presentation = {
     -- Slide width: 1 or more is a column count, between 0 and 1 a fraction of
     -- the terminal. The rest becomes the margin on either side.

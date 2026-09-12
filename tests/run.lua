@@ -5,7 +5,9 @@
 
 package.path = "lua/?.lua;lua/?/init.lua;" .. package.path
 
+local config = require("md-drafting.config")
 local focused_view = require("md-drafting.lib.focused_view")
+local link_providers = require("md-drafting.lib.link_providers")
 local section = require("md-drafting.lib.section")
 local syntax = require("md-drafting.syntax")
 local text = require("md-drafting.lib.text")
@@ -428,6 +430,132 @@ check(
 -- come back escaped rather than read as an item.
 check("header_line, percent escaped", header_line({ left = "100% done" }), " 100%% done%=%= ")
 
+-- lib: the directory a document sits in, which the local-file provider resolves
+-- its folder against
+
+local function document_dir(name)
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  if name ~= "" then
+    vim.api.nvim_buf_set_name(bufnr, name)
+  end
+  return util.document_dir(bufnr)
+end
+
+check("document_dir, a named buffer", document_dir("/home/writer/notes/doc.md"), "/home/writer/notes")
+check("document_dir, a file at the root", document_dir("/doc.md"), "/")
+check("document_dir, an unnamed buffer falls back to the working directory", document_dir(""), vim.fn.getcwd())
+
+-- lib: the path a link is written with
+
+check("relative_path, a file beside the document", util.relative_path("/notes", "/notes/pic.png"), "pic.png")
+check("relative_path, a folder below it", util.relative_path("/notes", "/notes/assets/pic.png"), "assets/pic.png")
+check("relative_path, one level up", util.relative_path("/notes/daily", "/notes/pic.png"), "../pic.png")
+check("relative_path, two levels up", util.relative_path("/a/b/c", "/a/pic.png"), "../../pic.png")
+check("relative_path, a sibling folder", util.relative_path("/a/b", "/a/c/pic.png"), "../c/pic.png")
+check("relative_path, nothing in common", util.relative_path("/a/b", "/x/pic.png"), "../../x/pic.png")
+check("relative_path, the document's own folder", util.relative_path("/a/b", "/a/b"), ".")
+check("relative_path, a trailing separator is not a segment", util.relative_path("/notes/", "/notes/pic.png"), "pic.png")
+
+-- lib: link providers. The registry is global, and nothing has required the
+-- plugin itself yet, so these three are all that is in it.
+
+local both = { label = "Both" }
+local link_only = { label = "Link only", kinds = { "link" } }
+local image_only = { label = "Image only", kinds = { "image" } }
+
+for _, provider in ipairs({ both, link_only, image_only }) do
+  link_providers.register(provider)
+end
+
+local function labels(kind)
+  local names = {}
+  for _, provider in ipairs(link_providers.for_kind(kind)) do
+    table.insert(names, provider.label)
+  end
+  return names
+end
+
+check("for_kind, link", labels("link"), { "Both", "Link only" })
+check("for_kind, image", labels("image"), { "Both", "Image only" })
+check("for_kind, naming no kinds is offered to any caller", labels("anything"), { "Both" })
+
+-- pick hands the picker labels rather than the providers themselves: a picker
+-- backend may read an item table's own fields, and snacks.nvim calls a
+-- `resolve` field it finds there.
+
+local original_select = vim.ui.select
+local offered, select_calls = nil, 0
+
+---@diagnostic disable-next-line: duplicate-set-field
+vim.ui.select = function(items, _, on_choice)
+  offered = items
+  select_calls = select_calls + 1
+  on_choice(items[2], 2)
+end
+
+local chosen
+link_providers.pick("link", function(provider)
+  chosen = provider
+end)
+
+check("pick offers labels, not provider tables", offered, { "Both", "Link only" })
+check("pick maps the choice back to its provider", chosen == link_only, true)
+
+chosen, select_calls = nil, 0
+link_providers.pick("anything", function(provider)
+  chosen = provider
+end)
+
+check("pick with one provider opens no picker", select_calls, 0)
+check("pick with one provider calls back with it", chosen == both, true)
+
+-- A caller naming a provider skips the question entirely.
+
+chosen, select_calls = nil, 0
+link_providers.pick("link", function(provider)
+  chosen = provider
+end, { provider = "Link only" })
+
+check("pick with a named provider opens no picker", select_calls, 0)
+check("pick with a named provider calls back with it", chosen == link_only, true)
+
+chosen = nil
+link_providers.pick("link", function(provider)
+  chosen = provider
+end, { provider = both })
+
+check("pick takes the provider itself, not only its label", chosen == both, true)
+
+chosen, select_calls = nil, 0
+link_providers.pick("link", function(provider)
+  chosen = provider
+end, { provider = "Image only" })
+
+check("pick with a provider of another kind falls back to no picker", select_calls, 0)
+check("pick with a provider of another kind calls back with nothing", chosen, nil)
+
+chosen = nil
+link_providers.pick("link", function(provider)
+  chosen = provider
+end, { provider = "Nothing registered under this" })
+
+check("pick with an unknown provider calls back with nothing", chosen, nil)
+
+-- Order: whatever `link_providers.order` names leads, the rest keep the order
+-- they registered in.
+
+config.options.link_providers.order = { "Link only" }
+check("for_kind, a named provider leads", labels("link"), { "Link only", "Both" })
+
+config.options.link_providers.order = { "Image only", "Both" }
+check("for_kind, a name matching nothing for the kind is skipped", labels("link"), { "Both", "Link only" })
+check("for_kind, the rest follow in registration order", labels("image"), { "Image only", "Both" })
+
+config.options.link_providers.order = {}
+check("for_kind, no order named is registration order", labels("link"), { "Both", "Link only" })
+
+vim.ui.select = original_select
+
 -- api: the dependent-plugin surface is the same code the plugin runs on
 
 local api = require("md-drafting").api
@@ -446,6 +574,195 @@ end
 
 check("api.section is get and set alone", sorted_keys(api.section), { "get", "set" })
 check("the section module is the same two", sorted_keys(section), { "get", "set" })
+check("api.register_link_provider registers", api.register_link_provider == link_providers.register, true)
+
+-- lib: the file browser, and the built-in provider that walks it. Requiring the
+-- plugin above registered "File or URL", so the callers below name it rather
+-- than meeting a provider picker that now has something to pick from.
+
+local file_browser = require("md-drafting.lib.file_browser")
+
+local root = vim.fs.normalize(vim.fn.tempname())
+vim.fn.mkdir(root .. "/assets", "p")
+vim.fn.mkdir(root .. "/.hidden", "p")
+vim.fn.writefile({ "" }, root .. "/assets/cat.png")
+vim.fn.writefile({ "" }, root .. "/note.md")
+vim.fn.writefile({ "" }, root .. "/pic.png")
+vim.fn.writefile({ "" }, root .. "/.secret.md")
+
+-- Every list the browser offered, and the labels to choose from them in turn.
+-- A label that is not on offer, or a script that has run out, abandons the
+-- picker, which is what a user pressing escape does.
+local offered, script = {}, {}
+
+---@diagnostic disable-next-line: duplicate-set-field
+vim.ui.select = function(items, _, on_choice)
+  table.insert(offered, items)
+
+  local wanted = table.remove(script, 1)
+  for idx, item in ipairs(items) do
+    if item == wanted then
+      return on_choice(item, idx)
+    end
+  end
+
+  on_choice(nil)
+end
+
+-- What was asked for, and what to answer with. A prompt past the end of the
+-- answers is abandoned, which is what escaping one does.
+local answers, prompts = {}, {}
+
+---@diagnostic disable-next-line: duplicate-set-field
+util.prompt = function(message)
+  table.insert(prompts, message)
+  return table.remove(answers, 1)
+end
+
+--- Browse from a clean slate, answering with what the browser did.
+local function browse(opts, choices, typed)
+  offered, script, answers, prompts = {}, vim.deepcopy(choices), vim.deepcopy(typed or {}), {}
+
+  local answer
+  file_browser.browse(vim.tbl_extend("force", { dir = root, typed_prompt = "Enter URL" }, opts), function(result)
+    answer = result
+  end)
+
+  return answer
+end
+
+browse({}, {})
+check("browse lists what it can do, then the parent, folders and files", offered[1], {
+  "[Enter URL…]",
+  "[Show hidden files]",
+  "../",
+  "assets/",
+  "note.md",
+  "pic.png",
+})
+
+browse({ insert_dirs = true }, {})
+check("browse offers the folder it is in as a target of its own", offered[1][2], "[Insert this folder]")
+
+browse({ filter = function(name)
+  return name:match("%.png$") ~= nil
+end }, {})
+check("browse filters files, never folders", offered[1], {
+  "[Enter URL…]",
+  "[Show hidden files]",
+  "../",
+  "assets/",
+  "pic.png",
+})
+
+-- Sorting, in a tree of its own so the listings checked above stay short.
+
+local mixed = vim.fs.normalize(vim.fn.tempname())
+vim.fn.mkdir(mixed .. "/Zed", "p")
+vim.fn.mkdir(mixed .. "/apex", "p")
+for _, name in ipairs({ "Beta.md", "alpha.md", "Alpha.md", "zulu.md" }) do
+  vim.fn.writefile({ "" }, mixed .. "/" .. name)
+end
+
+offered, script, answers = {}, {}, {}
+file_browser.browse({ dir = mixed, typed_prompt = "Enter URL" }, function() end)
+check("browse sorts folders and files together, without regard to case", offered[1], {
+  "[Enter URL…]",
+  "[Show hidden files]",
+  "../",
+  "Alpha.md",
+  "alpha.md",
+  "apex/",
+  "Beta.md",
+  "Zed/",
+  "zulu.md",
+})
+
+check("browse answers with an absolute path", browse({}, { "pic.png" }), { path = root .. "/pic.png" })
+check(
+  "browse walks into a folder before answering",
+  browse({}, { "assets/", "cat.png" }),
+  { path = root .. "/assets/cat.png" }
+)
+check(
+  "browse answers with the folder it walked into",
+  browse({ insert_dirs = true }, { "assets/", "[Insert this folder]" }),
+  { path = root .. "/assets" }
+)
+check("browse answers with typed text", browse({}, { "[Enter URL…]" }, { "www.vg.no" }), { text = "www.vg.no" })
+check("browse abandoned answers with nothing", browse({}, {}), nil)
+check("browse abandoned at a typed prompt answers with nothing", browse({}, { "[Enter URL…]" }, { "" }), nil)
+
+browse({}, { "[Show hidden files]" })
+check("browse hides dotfiles until asked", vim.tbl_contains(offered[1], ".secret.md"), false)
+check("browse shows dotfiles once toggled", vim.tbl_contains(offered[2], ".secret.md"), true)
+check("browse shows hidden folders too", vim.tbl_contains(offered[2], ".hidden/"), true)
+check("browse offers to hide them again", offered[2][2], "[Hide hidden files]")
+
+browse({}, { "[Hide hidden files]" })
+check("browse hides them again", vim.tbl_contains(offered[2], ".secret.md"), false)
+
+local document = vim.api.nvim_create_buf(false, true)
+vim.api.nvim_buf_set_name(document, root .. "/doc.md")
+vim.api.nvim_set_current_buf(document)
+
+--- The buffer contents after a generator call, for a document in `root`.
+local function inserted(run, choices, typed)
+  local bufnr = document
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "word" })
+  vim.api.nvim_win_set_cursor(0, { 1, 0 })
+
+  offered, script, answers, prompts = {}, vim.deepcopy(choices), vim.deepcopy(typed), {}
+  run()
+
+  return vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+end
+
+local generator = require("md-drafting").generator
+
+check("add_link writes what the browser answered, relative to the document", inserted(function()
+  generator.add_link({ provider = "File or URL" })
+end, { "note.md" }, { "Notes" }), { "word [Notes](note.md)" })
+
+check("add_link names the target it asks the text for", prompts, { "Enter link text (note.md): " })
+
+check("add_link writes a folder as its target", inserted(function()
+  generator.add_link({ provider = "File or URL" })
+end, { "assets/", "[Insert this folder]" }, { "Assets" }), { "word [Assets](assets)" })
+
+check("add_link writes typed text as it was given", inserted(function()
+  generator.add_link({ provider = "File or URL" })
+end, { "[Enter URL…]" }, { "www.vg.no", "VG" }), { "word [VG](www.vg.no)" })
+
+check("add_link with no text writes nothing", inserted(function()
+  generator.add_link({ provider = "File or URL" })
+end, { "note.md" }, { "" }), { "word" })
+
+check("add_image lists only images", inserted(function()
+  generator.add_image({ provider = "File or URL" })
+end, { "assets/", "cat.png" }, { "A cat" }), { "![A cat](assets/cat.png)", "word" })
+
+check("add_image lists no file that is not an image", vim.tbl_contains(offered[1], "note.md"), false)
+
+check("add_image asks for the alt text after the source, naming it", prompts, {
+  "Enter image alt text (assets/cat.png): ",
+})
+
+check("add_image writes an image with no alt text", inserted(function()
+  generator.add_image({ provider = "File or URL" })
+end, { "pic.png" }, { "" }), { "![](pic.png)", "word" })
+
+check("add_image opens where the document is, wherever the last one ended", inserted(function()
+  generator.add_image({ provider = "File or URL" })
+end, { "pic.png" }, { "A cat" }), { "![A cat](pic.png)", "word" })
+
+check("add_reference_style_link writes its definition from the same answer", inserted(function()
+  generator.add_reference_style_link({ provider = "File or URL" })
+end, { "note.md" }, { "Notes", "notes" }), { "word [Notes][notes]", "", "[notes]: note.md" })
+
+check("a provider named for no kind writes nothing", inserted(function()
+  generator.add_image({ provider = "Nope" })
+end, {}, {}), { "word" })
 
 if failures > 0 then
   io.stderr:write(("\n%d of %d checks failed\n"):format(failures, checks))

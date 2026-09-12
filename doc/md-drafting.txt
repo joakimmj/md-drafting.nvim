@@ -23,6 +23,7 @@ CONTENTS                                            *md-drafting-contents*
    15. Colors ............................. |md-drafting-colors|
    16. Commands ........................... |md-drafting-commands|
    17. API ................................ |md-drafting-api|
+   18. Link providers ..................... |md-drafting-link-providers|
 
 ==============================================================================
 1. INTRODUCTION                                 *md-drafting-introduction*
@@ -61,6 +62,16 @@ call, or none at all, gives exactly this: >lua
 
       -- Callout types offered by `add_callout`.
       callout_types = { "NOTE", "TIP", "IMPORTANT", "WARNING", "CAUTION" },
+
+      -- Where a link or an image can point.
+      link_providers = {
+        -- Order the picker offers providers in, by label.
+        order = {},
+        file_or_url = {
+          -- Extensions `add_image` lists.
+          image_extensions = { "png", "jpg", "jpeg", "gif", "webp", "svg" },
+        },
+      },
 
       presentation = {
         width = 80,
@@ -651,7 +662,7 @@ command in markdown buffers.
         new.
     md.generator.add_table()
         Insert a table skeleton.
-    md.generator.add_image()
+    md.generator.add_image({opts})
         Insert an image.
     md.generator.add_footnote()
         Insert a footnote and its definition.
@@ -681,5 +692,100 @@ command in markdown buffers.
 
 Every `prepare_*` function returns the function to call later, and exists
 because |vim.ui.select()| is asynchronous. See |md-drafting-actions-prepare|.
+
+==============================================================================
+18. LINK PROVIDERS                             *md-drafting-link-providers*
+
+Where `add_link`, `add_reference_style_link` and `add_image` get their target.
+This plugin asks; it does not itself know what a link or an image can point
+at, so that knowledge lives in providers: >lua
+
+    require("md-drafting").api.register_link_provider({
+      label = "Engram",
+      kinds = { "link" },
+      resolve = function(ctx, done)
+        done({ text = "My note", path = "my-note.md" })
+      end,
+    })
+<
+    label   Name the picker offers.
+    resolve `resolve(ctx, done)` is handed `ctx.kind` ("link" or "image") and
+            `ctx.text` (the label a selection supplied, when there was one),
+            and answers `done({ text = , path = })`, or `done(nil)` to
+            abort. `text` is the link text, or an image's alt text, and a
+            provider that knows neither asks for one once it has the target.
+            It answers through a callback rather than by returning, since a
+            provider is free to open a picker of its own.
+    kinds   Which callers the provider is offered to. A provider naming none
+            is offered to all of them.
+
+A provider that knows the link text asks for nothing; one that does not, as
+the built-in does not, prompts for it -- naming the target it resolved, since
+that is what the text is being written about.
+
+Every caller runs the same way round: the target first, the text after it. A
+link with no text is nothing to click, so an empty answer abandons it; an
+image with no alt text is a picture missing its description, which is a
+document's business rather than the plugin's, so there an empty answer is
+kept.
+
+While only one provider is registered for a kind there is no picker: one
+source is not a choice. With nothing else registered that is the case for
+every caller, so inserting a link does not begin with a menu.
+
+`link_providers.order` names the providers that lead, by label; the rest
+follow in registration order: >lua
+
+    link_providers = { order = { "Engram", "File or URL" } },
+<
+A caller may also name the provider it wants and skip the question, which is
+what a mapping bound at one source does: >lua
+
+    vim.keymap.set("n", "<leader>mi", function()
+      require("md-drafting").generator.add_image({ provider = "File or URL" })
+    end)
+<
+`provider` takes a label or a provider itself. A name no provider registered
+for that kind answers to is an error, not a reason to ask after all.
+
+                                                     *md-drafting-file-or-url*
+Built in, and the only provider until something registers another:
+
+    File or URL
+        Walks the files around the document, a directory at a time, and
+        writes the path relative to it, so the link keeps working wherever
+        the folder is opened from. Names no `kinds` -- a file and a URL are
+        each as good an image source as a link target.
+
+        Each list holds, in order -- folders and files in one listing,
+        sorted without regard to case:
+
+            [Enter URL…]        type the target instead: a URL, or a path to
+                                something that is not there yet, written as
+                                it was given
+            [Insert this folder]
+                                link the directory the list is in (links only)
+            [Show hidden files] list dotfiles here and from then on
+            ../                 the parent directory
+            assets/             walk into it
+            cat.png             the file, as a relative path
+
+        Every list opens in the document's own directory, the same place
+        every time and nothing to configure, so walking to a folder is a
+        habit rather than a guess at where the last insert left off.
+        `add_image` lists only
+        `link_providers.file_or_url.image_extensions`; anything else is
+        still reachable by typing the path.
+
+        Nothing is created on disk: a picker that makes folders as a side
+        effect of being opened is not what inserting a link asked for.
+
+The alt text has no default, deliberately -- one derived from the filename
+describes the file rather than the picture.
+
+`add_reference_style_link` asks for the reference name after the provider has
+answered, the link text being its default. A name the buffer already defines
+keeps the definition it has, and the path the provider answered with is
+dropped.
 
 vim:tw=78:ts=8:ft=help:norl:

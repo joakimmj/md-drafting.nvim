@@ -81,6 +81,18 @@ require("md-drafting").setup({
   -- Callout types offered by `add_callout`.
   callout_types = { "NOTE", "TIP", "IMPORTANT", "WARNING", "CAUTION" },
 
+  link_providers = {
+    -- Order the picker offers providers in, by label. The rest follow in
+    -- registration order.
+    order = {},
+
+    file_or_url = {
+      -- Extensions `add_image` lists. Anything else is still reachable by
+      -- typing the path.
+      image_extensions = { "png", "jpg", "jpeg", "gif", "webp", "svg" },
+    },
+  },
+
   presentation = {
     -- 1 or more is a column count, between 0 and 1 a fraction of the terminal.
     width = 80,
@@ -272,12 +284,12 @@ see `:help md-drafting-actions-prepare`.
 | `md.generator.prepare_callout(opts?)` | As above, resolved now and applied later |
 | `md.generator.add_block_quote(opts?)` | Quote the current line or selection |
 | `md.generator.prepare_block_quote(opts?)` | As above, resolved now and applied later |
-| `md.generator.add_link(opts?)` | Insert a link |
+| `md.generator.add_link(opts?)` | Insert a link, from a registered provider (`:help md-drafting-link-providers`) |
 | `md.generator.prepare_link(opts?)` | As above, resolved now and applied later |
-| `md.generator.add_reference_style_link(opts?)` | Insert a reference-style link |
+| `md.generator.add_reference_style_link(opts?)` | Insert a reference-style link, from a registered provider (`:help md-drafting-link-providers`) |
 | `md.generator.prepare_reference_style_link(opts?)` | As above, resolved now and applied later |
 | `md.generator.add_table()` | Insert a table skeleton |
-| `md.generator.add_image()` | Insert an image |
+| `md.generator.add_image(opts?)` | Insert an image, from a registered provider (`:help md-drafting-link-providers`) |
 | `md.generator.add_footnote()` | Insert a footnote and its definition |
 | `md.generator.add_code_block()` | Insert a fenced code block |
 

@@ -2,6 +2,51 @@
 -- where the API they wrap is, and named `lnum` where they are 1-indexed.
 local M = {}
 
+--- The directory the buffer's file sits in, falling back to the working
+--- directory for a buffer that has no file yet. Resolving against the
+--- document's own directory rather than any notion of a project root is what
+--- lets a flat folder of notes work with nothing configured.
+---@param bufnr integer Buffer id, or 0 for the current buffer
+---@return string dir Absolute directory path, with no trailing separator
+function M.document_dir(bufnr)
+  local name = vim.api.nvim_buf_get_name(bufnr)
+  if name == "" then
+    return vim.fn.getcwd()
+  end
+
+  return vim.fn.fnamemodify(name, ":h")
+end
+
+--- Where `target` sits relative to `from`, walking up with `..` when it is not
+--- underneath it. Written this way rather than absolutely so a link keeps
+--- working wherever the folder holding it is opened from.
+---@param from string Absolute directory the path is written from
+---@param target string Absolute path to write
+---@return string path Relative path, no "./" prefix, "." for `from` itself
+function M.relative_path(from, target)
+  local from_parts = vim.split(vim.fs.normalize(from), "/", { trimempty = true })
+  local target_parts = vim.split(vim.fs.normalize(target), "/", { trimempty = true })
+
+  local shared = 0
+  while shared < #from_parts and shared < #target_parts and from_parts[shared + 1] == target_parts[shared + 1] do
+    shared = shared + 1
+  end
+
+  local parts = {}
+  for _ = shared + 1, #from_parts do
+    table.insert(parts, "..")
+  end
+  for index = shared + 1, #target_parts do
+    table.insert(parts, target_parts[index])
+  end
+
+  if #parts == 0 then
+    return "."
+  end
+
+  return table.concat(parts, "/")
+end
+
 --- The text of a single line.
 ---@param bufnr integer Buffer id, or 0 for the current buffer
 ---@param row integer 0-indexed row

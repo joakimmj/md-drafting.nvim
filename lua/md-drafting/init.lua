@@ -54,6 +54,7 @@ M.actions = require("md-drafting.lib.actions")
 M.api = {
   syntax = require("md-drafting.syntax"),
   section = require("md-drafting.lib.section"),
+  register_link_provider = require("md-drafting.lib.link_providers").register,
 }
 
 -- Action menus
