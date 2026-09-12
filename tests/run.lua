@@ -9,6 +9,7 @@ local focused_view = require("md-drafting.lib.focused_view")
 local section = require("md-drafting.lib.section")
 local syntax = require("md-drafting.syntax")
 local text = require("md-drafting.lib.text")
+local util = require("md-drafting.lib.util")
 
 local failures = 0
 local checks = 0
@@ -273,12 +274,7 @@ check("parse_frontmatter, empty value", frontmatter({ "---", "tags:", "---" }), 
 })
 check("parse_frontmatter, empty block", frontmatter({ "---", "---" }), { fields = {}, end_row = 2 })
 
--- section: markers
-
-check("open_marker", section.open_marker("TOC"), "<!-- TOC -->")
-check("close_marker", section.close_marker("TOC"), "<!-- /TOC -->")
-
--- section: find
+-- section: get
 
 local document = {
   "# Title",
@@ -289,51 +285,128 @@ local document = {
   "Prose.",
 }
 
-check("find, present", { section.find(document, "TOC") }, { 2, 4 })
-check("find, absent", { section.find(document, "SYNAPSES") }, {})
-check("find, opening marker alone", { section.find({ "<!-- TOC -->", "text" }, "TOC") }, {})
-check("find, closing marker alone", { section.find({ "text", "<!-- /TOC -->" }, "TOC") }, {})
-check("find, indented markers", { section.find({ "  <!-- TOC -->", "  <!-- /TOC -->" }, "TOC") }, { 1, 2 })
 
--- section: regenerate, the one part that needs a buffer
+check("get, present", section.get(document, "TOC"), { "- [Title](#title)" })
+check("get, empty section", section.get({ "<!-- TOC -->", "<!-- /TOC -->" }, "TOC"), {})
+check("get, absent", section.get(document, "SYNAPSES"), nil)
 
-local function regenerate(lines, body, opts)
-  local bufnr = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-  section.regenerate(bufnr, "TOC", body, opts)
-  return vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+-- section: set
+
+check("set, replaces the body", section.set(document, "TOC", { "- [Other](#other)" }), {
+  "# Title",
+  "<!-- TOC -->",
+  "- [Other](#other)",
+  "<!-- /TOC -->",
+  "",
+  "Prose.",
+})
+
+check("set, empties the body", section.set(document, "TOC", {}), {
+  "# Title",
+  "<!-- TOC -->",
+  "<!-- /TOC -->",
+  "",
+  "Prose.",
+})
+
+check("set, writes the section at opts.at", section.set({ "# Title", "", "Prose." }, "TOC", {
+  "- [Title](#title)",
+}, { at = 2 }), {
+  "# Title",
+  "<!-- TOC -->",
+  "- [Title](#title)",
+  "<!-- /TOC -->",
+  "",
+  "Prose.",
+})
+
+check("set, writes the section at the end by default", section.set({ "# Title" }, "TOC", {}), {
+  "# Title",
+  "<!-- TOC -->",
+  "<!-- /TOC -->",
+})
+
+check(
+  "set, is idempotent",
+  section.set(section.set(document, "TOC", { "- [A](#a)" }), "TOC", { "- [A](#a)" }),
+  section.set(document, "TOC", { "- [A](#a)" })
+)
+
+-- section: the pair round-trips, which is what lets a caller edit a body rather
+-- than reach for a function per edit.
+
+check("get after set answers with the body it was given", section.get(section.set(document, "TOC", {
+  "- [A](#a)",
+  "- [B](#b)",
+}), "TOC"), { "- [A](#a)", "- [B](#b)" })
+
+local function append(lines, name, line)
+  local body = section.get(lines, name) or {}
+  body[#body + 1] = line
+  return section.set(lines, name, body)
 end
 
-check("regenerate, replaces an existing section", regenerate(document, { "- [New](#new)" }), {
+check("appending is get, edit, set", append(document, "TOC", "- [B](#b)"), {
   "# Title",
   "<!-- TOC -->",
-  "- [New](#new)",
+  "- [Title](#title)",
+  "- [B](#b)",
   "<!-- /TOC -->",
   "",
   "Prose.",
 })
-check("regenerate, at the given row", regenerate({ "# Title", "Prose." }, { "- [Title](#title)" }, { at = 2 }), {
+
+check("appending writes the section when there is none", append({ "# Title" }, "LOG", "- entry"), {
   "# Title",
-  "<!-- TOC -->",
-  "- [Title](#title)",
-  "<!-- /TOC -->",
+  "<!-- LOG -->",
+  "- entry",
+  "<!-- /LOG -->",
+})
+
+-- lib: replace_lines. What it is for is the write it does not make, so the
+-- checks are about extmarks and changedtick as much as about the lines.
+
+local probe_ns = vim.api.nvim_create_namespace("md-drafting-tests")
+
+--- Write `lines` into a buffer holding `before`, with an extmark on `mark_row`
+--- (0-indexed), and report what moved.
+local function replace_lines(before, lines, mark_row)
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, before)
+  if mark_row then
+    vim.api.nvim_buf_set_extmark(bufnr, probe_ns, mark_row, 0, {})
+  end
+
+  local tick = vim.api.nvim_buf_get_changedtick(bufnr)
+  util.replace_lines(bufnr, lines)
+
+  local marks = vim.api.nvim_buf_get_extmarks(bufnr, probe_ns, 0, -1, {})
+  return {
+    lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false),
+    mark_row = marks[1] and marks[1][2],
+    writes = vim.api.nvim_buf_get_changedtick(bufnr) - tick,
+  }
+end
+
+local before = { "# Title", "<!-- TOC -->", "- [A](#a)", "<!-- /TOC -->", "", "Prose." }
+local grown = { "# Title", "<!-- TOC -->", "- [A](#a)", "- [B](#b)", "<!-- /TOC -->", "", "Prose." }
+
+check("replace_lines, the buffer ends up holding the lines", replace_lines(before, grown).lines, grown)
+
+-- An extmark on "Prose." with one line inserted above it belongs one row lower.
+-- A whole-buffer write would drag it to the end of the file instead.
+check("replace_lines, a mark below the change follows its line", replace_lines(before, grown, 5).mark_row, 6)
+check("replace_lines, a mark above the change stays put", replace_lines(before, grown, 0).mark_row, 0)
+
+check("replace_lines, identical lines are not written", replace_lines(before, before, 5).writes, 0)
+check("replace_lines, identical lines leave marks alone", replace_lines(before, before, 5).mark_row, 5)
+
+check("replace_lines, a shrinking buffer", replace_lines(grown, before).lines, before)
+check("replace_lines, into an empty buffer", replace_lines({ "" }, { "# Title", "Prose." }).lines, {
+  "# Title",
   "Prose.",
 })
-check("regenerate, appends without a row", regenerate({ "# Title" }, { "- [Title](#title)" }), {
-  "# Title",
-  "<!-- TOC -->",
-  "- [Title](#title)",
-  "<!-- /TOC -->",
-})
-check("regenerate, empty body", regenerate({ "# Title" }, {}), { "# Title", "<!-- TOC -->", "<!-- /TOC -->" })
-check("regenerate, an existing section ignores at", regenerate(document, { "- [New](#new)" }, { at = 1 }), {
-  "# Title",
-  "<!-- TOC -->",
-  "- [New](#new)",
-  "<!-- /TOC -->",
-  "",
-  "Prose.",
-})
+check("replace_lines, emptying a buffer", replace_lines(before, { "" }).lines, { "" })
 
 -- lib: focused_view header
 
@@ -360,7 +433,19 @@ check("header_line, percent escaped", header_line({ left = "100% done" }), " 100
 local api = require("md-drafting").api
 
 check("api.syntax is the syntax module", api.syntax == syntax, true)
-check("api.section is the section module", api.section == section, true)
+check("api.section.get is the section module's", api.section.get == section.get, true)
+check("api.section.set is the section module's", api.section.set == section.set, true)
+
+-- The seam and the module are the same two functions now, which is worth holding
+-- in place: everything else the markers need is local to the file.
+local function sorted_keys(t)
+  local keys = vim.tbl_keys(t)
+  table.sort(keys)
+  return keys
+end
+
+check("api.section is get and set alone", sorted_keys(api.section), { "get", "set" })
+check("the section module is the same two", sorted_keys(section), { "get", "set" })
 
 if failures > 0 then
   io.stderr:write(("\n%d of %d checks failed\n"):format(failures, checks))

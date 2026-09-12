@@ -129,6 +129,32 @@ function M.prompt(message, default)
   return value
 end
 
+--- Make the buffer hold `lines`, writing only the one span where they differ.
+--- Scattered changes merge into that span, so this is for a caller rewriting a
+--- single region, not a general diff.
+---@param bufnr integer Buffer id, or 0 for the current buffer
+---@param lines string[] The lines the buffer should hold
+function M.replace_lines(bufnr, lines)
+  local old = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+
+  local first = 1
+  while first <= #old and first <= #lines and old[first] == lines[first] do
+    first = first + 1
+  end
+
+  local last_old, last_new = #old, #lines
+  while last_old >= first and last_new >= first and old[last_old] == lines[last_new] do
+    last_old, last_new = last_old - 1, last_new - 1
+  end
+
+  -- Nothing between the two runs: the buffer already holds these lines.
+  if first > last_old and first > last_new then
+    return
+  end
+
+  vim.api.nvim_buf_set_lines(bufnr, first - 1, last_old, false, vim.list_slice(lines, first, last_new))
+end
+
 --- Root of the buffer's markdown syntax tree.
 ---@param bufnr integer Buffer id, or 0 for the current buffer
 ---@return TSNode? root Tree root, or nil once the caller has been told why not

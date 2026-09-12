@@ -66,7 +66,6 @@ function M.generate_toc()
   local bufnr = vim.api.nvim_get_current_buf()
 
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local toc_start, toc_end = section.find(lines, "TOC")
 
   local root = util.ts_root(bufnr)
   if not root then
@@ -76,22 +75,22 @@ function M.generate_toc()
   local query = vim.treesitter.query.parse("markdown", "(atx_heading) @heading")
   local body = {}
 
+  -- Every line the table of contents writes is a list item, so a "#" in it only
+  -- ever sits mid-line inside a link destination. Nothing the last run wrote can
+  -- come back as a heading, and the block needs no skipping.
   for _, match, _ in query:iter_captures(root, bufnr, 0, -1) do
-    local row = match:range() + 1
-    -- A heading the last run wrote into the table of contents is not one of the
-    -- document's own headings.
-    if not (toc_start and toc_end and row >= toc_start and row <= toc_end) then
-      local level, heading = syntax.parse_heading(vim.treesitter.get_node_text(match, bufnr))
-      if heading and heading ~= "" then
-        local entry = syntax.format_link(heading, syntax.format_anchor(heading))
-        table.insert(body, syntax.format_list_item(string.rep("  ", level - 1) .. "- ", nil, entry))
-      end
+    local level, heading = syntax.parse_heading(vim.treesitter.get_node_text(match, bufnr))
+    if heading and heading ~= "" then
+      local entry = syntax.format_link(heading, syntax.format_anchor(heading))
+      table.insert(body, syntax.format_list_item(string.rep("  ", level - 1) .. "- ", nil, entry))
     end
   end
 
   -- With no markers in the file yet, the table of contents is written where the
-  -- cursor is: the writer is the one who knows where it belongs.
-  section.regenerate(bufnr, "TOC", body, { at = vim.api.nvim_win_get_cursor(0)[1] })
+  -- cursor is: the writer is the one who knows where it belongs. Writing through
+  -- `replace_lines` keeps a regeneration down to the rows that actually changed,
+  -- and down to nothing at all when the table of contents is already current.
+  util.replace_lines(bufnr, section.set(lines, "TOC", body, { at = vim.api.nvim_win_get_cursor(0)[1] }))
 end
 
 --- Ask for a column count and insert an empty table, cursor in the first cell.
