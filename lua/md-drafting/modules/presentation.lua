@@ -54,7 +54,11 @@ function M.start_presentation()
 
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
-  local fields, front_matter_end_line = syntax.parse_frontmatter(lines)
+  local fields, front_matter_end_line, err = syntax.parse_frontmatter(lines)
+  if err then
+    vim.notify("md-drafting: frontmatter " .. err, vim.log.levels.ERROR)
+    return
+  end
   front_matter_end_line = front_matter_end_line or 0
 
   for _, key in ipairs({ "header_left", "header_center" }) do
