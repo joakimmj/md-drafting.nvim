@@ -242,8 +242,8 @@ check("format_emphasis, empty pair", syntax.format_emphasis("", syntax.EMPHASIS.
 -- syntax: frontmatter
 
 local function frontmatter(lines)
-  local fields, end_row = syntax.parse_frontmatter(lines)
-  return { fields = fields, end_row = end_row }
+  local fields, end_row, err = syntax.parse_frontmatter(lines)
+  return { fields = fields, end_row = end_row, err = err }
 end
 
 check("parse_frontmatter, none", frontmatter({ "# Title" }), { fields = nil, end_row = nil })
@@ -275,6 +275,119 @@ check("parse_frontmatter, empty value", frontmatter({ "---", "tags:", "---" }), 
   end_row = 3,
 })
 check("parse_frontmatter, empty block", frontmatter({ "---", "---" }), { fields = {}, end_row = 2 })
+
+-- frontmatter lists are read the way YAML reads them, with every value a string
+
+check("parse_frontmatter, flow and block lists together", frontmatter({
+  "---",
+  [[string_value: "[1, 2, 3]"]],
+  "flow_style: [",
+  [[1, "2", '3', "4, 5", '6, 7, 8',]],
+  "9",
+  "]",
+  "block_style:",
+  "- 1",
+  [[- "2"]],
+  "- '3'",
+  [=[- [4, "5, 6", '7, 8, 9']]=],
+  "---",
+}), {
+  fields = {
+    string_value = "[1, 2, 3]",
+    flow_style = { "1", "2", "3", "4, 5", "6, 7, 8", "9" },
+    block_style = { "1", "2", "3", { "4", "5, 6", "7, 8, 9" } },
+  },
+  end_row = 12,
+})
+check("parse_frontmatter, flow list on one line", frontmatter({ "---", "tags: [java, nvim]", "---" }), {
+  fields = { tags = { "java", "nvim" } },
+  end_row = 3,
+})
+check("parse_frontmatter, flow lists nest", frontmatter({ "---", "a: [1, [2, [3, [4]]]]", "---" }), {
+  fields = { a = { "1", { "2", { "3", { "4" } } } } },
+  end_row = 3,
+})
+check("parse_frontmatter, empty flow list and trailing comma", frontmatter({ "---", "a: []", "b: [a, b,]", "---" }), {
+  fields = { a = {}, b = { "a", "b" } },
+  end_row = 4,
+})
+check("parse_frontmatter, quoted scalars", frontmatter({ "---", [[a: "A note"]], "b: 'it''s'", "---" }), {
+  fields = { a = "A note", b = "it's" },
+  end_row = 4,
+})
+check("parse_frontmatter, escapes in quotes", frontmatter({ "---", [==[a: ["say \"hi\"", 'it''s']]==], "---" }), {
+  fields = { a = { 'say "hi"', "it's" } },
+  end_row = 3,
+})
+check("parse_frontmatter, an apostrophe inside plain text", frontmatter({ "---", "a: [it's, fine]", "---" }), {
+  fields = { a = { "it's", "fine" } },
+  end_row = 3,
+})
+check("parse_frontmatter, quoted scalar over lines", frontmatter({ "---", [[a: "one]], [[  two"]], "---" }), {
+  fields = { a = "one two" },
+  end_row = 4,
+})
+check("parse_frontmatter, block lists nest", frontmatter({
+  "---",
+  "a:",
+  "  - 1",
+  "  -",
+  "    - 2",
+  "    -",
+  "      - 3",
+  "  - 4",
+  "---",
+}), {
+  fields = { a = { "1", { "2", { "3" } }, "4" } },
+  end_row = 9,
+})
+check("parse_frontmatter, compact nested block list", frontmatter({ "---", "a:", "- - 1", "  - 2", "- 3", "---" }), {
+  fields = { a = { { "1", "2" }, "3" } },
+  end_row = 6,
+})
+check("parse_frontmatter, empty block item", frontmatter({ "---", "a:", "- ", "- b", "---" }), {
+  fields = { a = { "", "b" } },
+  end_row = 5,
+})
+check("parse_frontmatter, indented block list", frontmatter({ "---", "a:", "    - 1", "    - 2", "---" }), {
+  fields = { a = { "1", "2" } },
+  end_row = 5,
+})
+check("parse_frontmatter, flow list in a block item over lines", frontmatter({ "---", "a:", "- [x,", "  y]", "---" }), {
+  fields = { a = { { "x", "y" } } },
+  end_row = 5,
+})
+
+check("parse_frontmatter, text after a flow list", frontmatter({ "---", "a: [Draft] note", "---" }), {
+  err = "line 2: unexpected text after flow list for 'a'",
+})
+check("parse_frontmatter, text after a quoted value", frontmatter({ "---", [[a: "x" y]], "---" }), {
+  err = "line 2: unexpected text after quoted value for 'a'",
+})
+check("parse_frontmatter, text between flow items", frontmatter({ "---", [=[a: ["b" c]]=], "---" }), {
+  err = "line 2: unexpected text in flow list for 'a'",
+})
+check("parse_frontmatter, empty flow item", frontmatter({ "---", "a: [a,,b]", "---" }), {
+  err = "line 2: unexpected text in flow list for 'a'",
+})
+check("parse_frontmatter, unclosed flow list", frontmatter({ "---", "tags: [a,", "b", "---" }), {
+  err = "line 2: unclosed flow list for 'tags'",
+})
+check("parse_frontmatter, unclosed flow list at the end", frontmatter({ "---", "tags: [a," }), {
+  err = "line 2: unclosed flow list for 'tags'",
+})
+check("parse_frontmatter, unclosed quote", frontmatter({ "---", [[a: "one]], "---" }), {
+  err = "line 2: unclosed quote for 'a'",
+})
+check("parse_frontmatter, block item out of line", frontmatter({ "---", "a:", "  - 1", " - 2", "---" }), {
+  err = "line 4: bad indentation for 'a'",
+})
+check("parse_frontmatter, block item left of its list", frontmatter({ "---", "a:", "  - 1", "- 2", "---" }), {
+  err = "line 4: bad indentation for 'a'",
+})
+check("parse_frontmatter, block item under a value", frontmatter({ "---", "a: x", "- y", "---" }), {
+  err = "line 3: list item under a value for 'a'",
+})
 
 -- section: get
 
