@@ -38,7 +38,7 @@ owns its own buffer. See |md-drafting-mappings|.
 ==============================================================================
 2. REQUIREMENTS                                 *md-drafting-requirements*
 
-Neovim 0.9 or later, and nvim-treesitter with the `markdown` and
+Neovim 0.10 or later, and nvim-treesitter with the `markdown` and
 `markdown_inline` parsers installed. The syntax tree is what tells a heading
 from a "#" inside a fenced code block, and a reference definition from a line
 that looks like one.
