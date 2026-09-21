@@ -8,7 +8,7 @@ local api = require("md-drafting").api
 
 | Name | What it is |
 |---|---|
-| `api.syntax` | Every markdown construct the plugin knows, as pure functions over strings — `format_link`, `parse_links`, `parse_list_item`, `parse_checkbox`, `parse_heading`, `format_anchor`, `parse_frontmatter`, and the rest |
+| `api.syntax` | Every markdown construct the plugin knows, as pure functions over strings — `format_link`, `parse_links`, `parse_list_item`, `parse_checkbox`, `parse_heading`, `format_anchor`, `parse_frontmatter`, `format_frontmatter_value`, `set_frontmatter_field`, and the rest |
 | `api.section` | Read and replace a named section between fixed markers — the mechanism the TOC is built on. Two functions, `get` and `set`. See below |
 | `api.register_link_provider` | Add a source of link targets, so a link can point at something other than a typed URL |
 

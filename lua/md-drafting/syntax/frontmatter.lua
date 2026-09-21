@@ -6,6 +6,13 @@ local text_util = require("md-drafting.lib.text")
 
 local QUOTES = { ['"'] = true, ["'"] = true }
 
+--- Whether a line is a YAML comment, at any indentation.
+---@param line string
+---@return boolean
+local function is_comment(line)
+  return text_util.trim(line):sub(1, 1) == "#"
+end
+
 -- What a backslash stands for inside double quotes; any other escaped
 -- character stands for itself.
 local ESCAPES = { n = "\n", t = "\t" }
@@ -155,18 +162,22 @@ local function read_multiline(lines, row, text)
   end
 end
 
+---@alias md_drafting.FrontmatterSpans table<string, { first: integer, last: integer, repeated?: boolean }>
+
 --- Read a document's frontmatter: scalars and lists, block or flow, nested to
 --- any depth. Values stay strings.
 ---@param lines string[] Text lines
 ---@return table<string, string|table>? fields Fields, or nil when there is no frontmatter
 ---@return integer? end_row 1-indexed row of the closing delimiter
 ---@return string? err Why the frontmatter could not be read
+---@return md_drafting.FrontmatterSpans? spans Rows each field is written on
 function M.parse_frontmatter(lines)
   if text_util.trim(lines[1] or "") ~= "---" then
     return nil
   end
 
   local fields = {}
+  local spans = {}
   local key
   -- The block lists open under `key`, innermost last. `open` marks a list
   -- whose last item is an empty `-`, which deeper items turn into a list.
@@ -180,7 +191,7 @@ function M.parse_frontmatter(lines)
   while row <= #lines do
     local line = lines[row]
     if text_util.trim(line) == "---" then
-      return fields, row
+      return fields, row, nil, spans
     end
 
     local indent, item = line:match("^(%s*)%-%s+(.*)$")
@@ -242,9 +253,12 @@ function M.parse_frontmatter(lines)
         frame.open = false
         row = last_row
       end
+      spans[key].last = row
     else
+      -- A comment is not a field, whatever it holds. It can only be mistaken
+      -- for a key line: a list item starts with "-".
       local name, value = line:match("^([^:]+):%s*(.*)$")
-      if name then
+      if name and not is_comment(line) then
         key = text_util.trim(name)
         stack = {}
 
@@ -253,12 +267,127 @@ function M.parse_frontmatter(lines)
           return fail(row, err)
         end
         fields[key] = result
+        -- A key written twice keeps its last value, as `fields` does, and is
+        -- marked so a writer knows the earlier one is still there.
+        spans[key] = { first = row, last = last_row, repeated = spans[key] ~= nil or nil }
         row = last_row
       end
     end
 
     row = row + 1
   end
+end
+
+-- What a value cannot hold unquoted and still read back as itself: flow-list
+-- and mapping punctuation, a comment, a quote, or a line break.
+local NEEDS_QUOTES = "[%[%]{},:#\"'\n\t]"
+
+-- Characters a plain value may not start with, since YAML reads them as
+-- something other than text.
+local INDICATORS = "^[%-?!&*|>%%@`]"
+
+--- Write one value the way parse_frontmatter reads it back: a string as plain
+--- text when that is unambiguous and double-quoted otherwise, a list as a flow
+--- list.
+---@param value string|table String, or a list of values
+---@return string text
+function M.format_frontmatter_value(value)
+  if type(value) == "table" then
+    local items = {}
+    for _, item in ipairs(value) do
+      table.insert(items, M.format_frontmatter_value(item))
+    end
+    return "[" .. table.concat(items, ", ") .. "]"
+  end
+
+  if value ~= "" and value == text_util.trim(value) and not value:find(NEEDS_QUOTES) and not value:find(INDICATORS) then
+    return value
+  end
+  return '"' .. value:gsub('[\\"]', "\\%0"):gsub("\n", "\\n"):gsub("\t", "\\t") .. '"'
+end
+
+--- Set one field in a document's frontmatter, keeping every other line as it
+--- is. The field's own lines are replaced by one — comments among them kept
+--- after it — a new field goes last, and a document without frontmatter gets
+--- one. A nil value removes the field; `vim.NIL` writes the bare key, which
+--- YAML reads as no value and parse_frontmatter as "". A field written in a
+--- shape this cannot rewrite in full is refused rather than left half-replaced.
+---@param lines string[] Text lines
+---@param name string Field name
+---@param value? string|table|userdata New value, nil to remove the field, or vim.NIL for the bare key
+---@return string[]? lines New lines, or nil when the field cannot be rewritten
+---@return string? err Why not
+function M.set_frontmatter_field(lines, name, value)
+  local fields, end_row, err, spans = M.parse_frontmatter(lines)
+  if err then
+    return nil, err
+  end
+
+  local result = {}
+  for index, line in ipairs(lines) do
+    result[index] = line
+  end
+  local line
+  if value == vim.NIL then
+    line = name .. ":"
+  elseif value ~= nil then
+    line = ("%s: %s"):format(name, M.format_frontmatter_value(value --[[@as string|table]]))
+  end
+
+  if not fields then
+    if line then
+      table.insert(result, 1, "---")
+      table.insert(result, 2, line)
+      table.insert(result, 3, "---")
+    end
+    return result
+  end
+
+  ---@cast spans md_drafting.FrontmatterSpans
+  ---@cast end_row integer
+  local span = spans[name]
+  if not span then
+    if line then
+      table.insert(result, end_row, line)
+    end
+    return result
+  end
+
+  if span.repeated then
+    return nil, ("'%s' is written more than once"):format(name)
+  end
+
+  -- Indented lines after the field belong to it, in YAML: a block scalar's
+  -- text, a nested mapping. Those are not read, so they would be left behind
+  -- under the new value; refuse instead. Comments are not content.
+  for row = span.last + 1, end_row - 1 do
+    local following = lines[row]
+    if following:match("^%S") then
+      break
+    elseif text_util.trim(following) ~= "" and not is_comment(following) then
+      return nil, ("line %d: '%s' continues in a shape that cannot be rewritten"):format(row, name)
+    end
+  end
+
+  local comments = {}
+  for row = span.first, span.last do
+    if is_comment(lines[row]) then
+      table.insert(comments, lines[row])
+    end
+  end
+
+  for _ = span.first, span.last do
+    table.remove(result, span.first)
+  end
+  local at = span.first
+  if line then
+    table.insert(result, at, line)
+    at = at + 1
+  end
+  for index, comment in ipairs(comments) do
+    table.insert(result, at + index - 1, comment)
+  end
+  return result
 end
 
 return M

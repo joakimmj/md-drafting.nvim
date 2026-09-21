@@ -389,6 +389,155 @@ check("parse_frontmatter, block item under a value", frontmatter({ "---", "a: x"
   err = "line 3: list item under a value for 'a'",
 })
 
+-- syntax: frontmatter, where each field sits
+
+check(
+  "parse_frontmatter, the rows each field spans",
+  select(4, syntax.parse_frontmatter({ "---", "title: A", "tags:", "  - a", "  - b", "list: [c,", "  d]", "---" })),
+  { title = { first = 2, last = 2 }, tags = { first = 3, last = 5 }, list = { first = 6, last = 7 } }
+)
+
+-- syntax: frontmatter, writing
+
+check("format_frontmatter_value, plain", syntax.format_frontmatter_value("Alice Smith"), "Alice Smith")
+check("format_frontmatter_value, a flow list", syntax.format_frontmatter_value({ "a", "b" }), "[a, b]")
+check("format_frontmatter_value, nested", syntax.format_frontmatter_value({ "a", { "b" } }), "[a, [b]]")
+check(
+  "format_frontmatter_value, punctuation is quoted",
+  syntax.format_frontmatter_value({ "a, b", "c: d", "#e", "[f]" }),
+  [=[["a, b", "c: d", "#e", "[f]"]]=]
+)
+check("format_frontmatter_value, a quote is escaped", syntax.format_frontmatter_value('say "hi"'), [["say \"hi\""]])
+check("format_frontmatter_value, edge whitespace", syntax.format_frontmatter_value(" x "), [[" x "]])
+check("format_frontmatter_value, a YAML indicator first", syntax.format_frontmatter_value("- x"), [["- x"]])
+check("format_frontmatter_value, empty", syntax.format_frontmatter_value(""), [[""]])
+
+local document = { "---", "title: Note", "tags:", "  - a", "  - b", "---", "# Body" }
+check(
+  "set_frontmatter_field, replaces a field's lines with one",
+  syntax.set_frontmatter_field(document, "tags", {
+    "a",
+    "b",
+    "c",
+  }),
+  { "---", "title: Note", "tags: [a, b, c]", "---", "# Body" }
+)
+check("set_frontmatter_field, a new field goes last", syntax.set_frontmatter_field(document, "owner", "Alice"), {
+  "---",
+  "title: Note",
+  "tags:",
+  "  - a",
+  "  - b",
+  "owner: Alice",
+  "---",
+  "# Body",
+})
+check("set_frontmatter_field, nil removes the field", syntax.set_frontmatter_field(document, "tags"), {
+  "---",
+  "title: Note",
+  "---",
+  "# Body",
+})
+check("set_frontmatter_field, vim.NIL writes the bare key", syntax.set_frontmatter_field(document, "tags", vim.NIL), {
+  "---",
+  "title: Note",
+  "tags:",
+  "---",
+  "# Body",
+})
+check(
+  "set_frontmatter_field, the bare key reads back empty",
+  syntax.parse_frontmatter(syntax.set_frontmatter_field(document, "owner", vim.NIL) --[[@as string[] ]]).owner,
+  ""
+)
+check("set_frontmatter_field, no frontmatter yet", syntax.set_frontmatter_field({ "# Body" }, "tags", { "java" }), {
+  "---",
+  "tags: [java]",
+  "---",
+  "# Body",
+})
+check("set_frontmatter_field, removing from nothing", syntax.set_frontmatter_field({ "# Body" }, "tags"), {
+  "# Body",
+})
+check("set_frontmatter_field, the input is left alone", document[3], "tags:")
+check(
+  "set_frontmatter_field, unreadable frontmatter is refused",
+  { syntax.set_frontmatter_field({ "---", "tags: [a,", "---" }, "tags", { "b" }) },
+  { nil, "line 2: unclosed flow list for 'tags'" }
+)
+check(
+  "set_frontmatter_field, what it writes reads back",
+  syntax.parse_frontmatter(syntax.set_frontmatter_field(document, "tags", { "x, y", 'q"', "- z" }) --[[@as string[] ]]).tags,
+  { "x, y", 'q"', "- z" }
+)
+
+-- syntax: frontmatter, comments
+
+check("parse_frontmatter, a comment is not a field", syntax.parse_frontmatter({ "---", "# owner: x", "a: 1", "---" }), {
+  a = "1",
+})
+check(
+  "parse_frontmatter, a comment between list items",
+  syntax.parse_frontmatter({ "---", "tags:", "  - a", "  # see: below", "  - b", "---" }),
+  { tags = { "a", "b" } }
+)
+
+-- syntax: frontmatter, what set_frontmatter_field leaves alone and refuses
+
+local function set_tags(lines)
+  return { syntax.set_frontmatter_field(lines, "tags", { "x" }) }
+end
+
+check("set_frontmatter_field, a block list at column 0", set_tags({ "---", "tags:", "- a", "- b", "t: A", "---" }), {
+  { "---", "tags: [x]", "t: A", "---" },
+})
+check(
+  "set_frontmatter_field, a nested block list",
+  set_tags({ "---", "tags:", "  - a", "  - - b", "    - c", "t: A", "---" }),
+  { { "---", "tags: [x]", "t: A", "---" } }
+)
+check("set_frontmatter_field, a flow list over lines", set_tags({ "---", "tags: [a,", "  b]", "t: A", "---" }), {
+  { "---", "tags: [x]", "t: A", "---" },
+})
+check(
+  "set_frontmatter_field, quoted neighbours untouched",
+  set_tags({ "---", 't: "A: b"', "tags: ['x, y']", "n: 'it''s'", "---" }),
+  { { "---", 't: "A: b"', "tags: [x]", "n: 'it''s'", "---" } }
+)
+check(
+  "set_frontmatter_field, a comment among its lines is kept",
+  set_tags({ "---", "tags:", "  - a", "  # see: below", "  - b", "t: A", "---" }),
+  { { "---", "tags: [x]", "  # see: below", "t: A", "---" } }
+)
+check(
+  "set_frontmatter_field, comments after it stay put",
+  set_tags({ "---", "tags: [a]", "  # keep", "# keep too", "t: A", "---" }),
+  { { "---", "tags: [x]", "  # keep", "# keep too", "t: A", "---" } }
+)
+check(
+  "set_frontmatter_field, a neighbouring block scalar untouched",
+  set_tags({ "---", "tags: [a]", "summary: |", "  line one", "t: A", "---" }),
+  { { "---", "tags: [x]", "summary: |", "  line one", "t: A", "---" } }
+)
+check(
+  "set_frontmatter_field, a neighbouring mapping untouched",
+  set_tags({ "---", "tags: [a]", "meta:", "  email: x@y", "t: A", "---" }),
+  { { "---", "tags: [x]", "meta:", "  email: x@y", "t: A", "---" } }
+)
+check("set_frontmatter_field, refuses a block scalar", set_tags({ "---", "tags: |", "  a", "  b", "t: A", "---" }), {
+  nil,
+  "line 3: 'tags' continues in a shape that cannot be rewritten",
+})
+check("set_frontmatter_field, refuses a nested mapping", set_tags({ "---", "tags:", "  name: a", "t: A", "---" }), {
+  nil,
+  "line 3: 'tags' continues in a shape that cannot be rewritten",
+})
+check(
+  "set_frontmatter_field, refuses a key written twice",
+  set_tags({ "---", "tags: [a]", "t: A", "tags: [b]", "---" }),
+  { nil, "'tags' is written more than once" }
+)
+
 -- section: get
 
 local document = {
